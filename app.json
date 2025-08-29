@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "NGSK-app",
-    "slug": "NGSK-app",
-    "version": "1.0.0",
+    "name": "NGSK",
+    "slug": "NGSK",
+    "version": "3.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
@@ -14,10 +14,18 @@
       "bundleIdentifier": "com.ngsk.NGSKapp",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "googleServicesFile": "./GoogleService-Info.plist"
-    },
+      }    },
     "android": {
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            { "scheme": "https", "host": "www.youtube.com" },
+            { "scheme": "https", "host": "youtube.com" }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
