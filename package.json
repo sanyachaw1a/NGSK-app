@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
-    "@gorhom/bottom-sheet": "^5.1.2",
+    "@gorhom/bottom-sheet": "5.1.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/slider": "5.0.1",
     "@react-navigation/bottom-tabs": "^7.2.0",
@@ -71,6 +71,7 @@
   },
   "private": true,
   "overrides": {
-    "@types/react": "~19.1.10"
+    "@types/react": "~19.1.10",
+    "@gorhom/bottom-sheet": "5.1.2"
   }
 }
