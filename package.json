@@ -1,7 +1,10 @@
 {
+  
   "name": "ngsk",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "engines": { "node": ">=18 <21" },
+  "packageManager": "npm@10.7.0",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
