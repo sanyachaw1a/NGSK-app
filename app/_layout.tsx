@@ -1,29 +1,21 @@
+// _layout.tsx
 import React from 'react';
-import { View } from 'react-native';
+import { View, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import {
-  createBottomTabNavigator
-} from '@react-navigation/bottom-tabs';
-import {
-  createNativeStackNavigator
-} from '@react-navigation/native-stack';
-import {
-  GestureHandlerRootView,
-  PanGestureHandler,
-  State
-} from 'react-native-gesture-handler';
-import {
-  useNavigation,
-  useRoute,
-  RouteProp
-} from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { GestureHandlerRootView } from 'react-native-gesture-handler'; // keep root view for consistency
 
+import * as SplashScreen from 'expo-splash-screen';
+import * as Font from 'expo-font';
+
+// Screens
 import MainScreen from './index';
 import SecondScreen from './SecondScreen';
 import PaathList from './PaathList';
 import PaathDetail from './PaathDetail';
 
-// ✅ Types for navigation
+// ✅ Types for navigation (unchanged)
 export type RootStackParamList = {
   Tabs: undefined;
   MainScreen: undefined;
@@ -34,55 +26,9 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator();
-const SWIPE_THRESHOLD = 50;
 
-interface GestureWrapperProps {
-  children: React.ReactNode;
-}
-
-function SwipeGestureWrapper({ children }: GestureWrapperProps) {
-  const navigation = useNavigation<any>();
-  const route = useRoute<RouteProp<any>>();
-
-  let isSwiping = false;
-
-  const onGestureEvent = (event: any) => {
-    const { translationX } = event.nativeEvent;
-    if (!isSwiping && Math.abs(translationX) > SWIPE_THRESHOLD) {
-      isSwiping = true;
-      if (translationX > 0) {
-        // swipe right
-        if (route.name === 'SecondScreen') {
-          navigation.navigate('MainScreen');
-        } else if (route.name === 'PaathScreen') {
-          navigation.navigate('SecondScreen');
-        }
-      } else {
-        // swipe left
-        if (route.name === 'MainScreen') {
-          navigation.navigate('SecondScreen');
-        } else if (route.name === 'SecondScreen') {
-          navigation.navigate('PaathScreen');
-        }
-      }
-    }
-  };
-
-  const onHandlerStateChange = (event: any) => {
-    if (event.nativeEvent.state === State.END) {
-      isSwiping = false;
-    }
-  };
-
-  return (
-    <PanGestureHandler
-      onGestureEvent={onGestureEvent}
-      onHandlerStateChange={onHandlerStateChange}
-    >
-      <View style={{ flex: 1 }}>{children}</View>
-    </PanGestureHandler>
-  );
-}
+// Keep splash until fonts are ready
+SplashScreen.preventAutoHideAsync().catch(() => { /* already hidden is fine */ });
 
 function Tabs() {
   const ORANGE = '#E27528';
@@ -135,27 +81,50 @@ function Tabs() {
   );
 }
 
-
 export default function Layout() {
+  const [ready, setReady] = React.useState(false);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        if (Platform.OS === 'android') {
+          await Font.loadAsync({
+            'NotoSansGurmukhi-Regular': require('../assets/fonts/NotoSansGurmukhi-Regular.ttf'),
+            'NotoSansDevanagari-Regular': require('../assets/fonts/NotoSansDevanagari-Regular.ttf'),
+          });
+        }
+      } catch (e) {
+        console.warn('Font load error:', e);
+      } finally {
+        setReady(true);
+        await SplashScreen.hideAsync().catch(() => {});
+      }
+    })();
+  }, []);
+
+  if (!ready) return null;
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <Stack.Navigator>
-        {/* Tabs are the main entry */}
-        <Stack.Screen
-          name="Tabs"
-          component={Tabs}
-          options={{ headerShown: false }}
-        />
+      <View style={{ flex: 1 }}>
+        <Stack.Navigator>
+          {/* Tabs are the main entry */}
+          <Stack.Screen
+            name="Tabs"
+            component={Tabs}
+            options={{ headerShown: false }}
+          />
 
-        {/* ✅ Now PaathDetail is a registered screen */}
-        <Stack.Screen
-          name="PaathDetail"
-          component={PaathDetail}
-          options={({ route }) => ({
-            title: route.params.paathName,
-          })}
-        />
-      </Stack.Navigator>
+          {/* ✅ PaathDetail registered */}
+          <Stack.Screen
+            name="PaathDetail"
+            component={PaathDetail}
+            options={({ route }) => ({
+              title: route.params.paathName,
+            })}
+          />
+        </Stack.Navigator>
+      </View>
     </GestureHandlerRootView>
   );
 }

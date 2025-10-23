@@ -1,257 +1,74 @@
-import { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Alert, Pressable } from 'react-native';
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
+import { useEffect, useRef, useState } from 'react';
+import {
+  ScrollView,
+  View,
+  Text,
+  TouchableOpacity,
+  ActivityIndicator,
+  StyleSheet,
+  Modal,
+  Pressable,
+  AppState, // 🔔 Notifications
+  Platform, // 🔔 Notifications
+} from 'react-native';
 import * as Linking from 'expo-linking';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import AboutModal from './AboutModal';
 import { Audio } from 'expo-av';
-import { Modal, Button } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import AboutModal from './AboutModal';
+import { Image, ImageSourcePropType } from 'react-native';
+import { Dimensions } from 'react-native';
+const { width: screenWidth } = Dimensions.get('window');
+import type { NotificationBehavior } from 'expo-notifications';
 
+// 🔔 Notifications
+import * as Notifications from 'expo-notifications';
 
+// Set how notifications show if app is foregrounded (OK to keep here; ideally in App.tsx)
+Notifications.setNotificationHandler({
+  handleNotification: async (): Promise<NotificationBehavior> => ({
+    shouldShowAlert: true,
+    shouldShowBanner: true,  // iOS 14+ banner
+    shouldShowList: true,    // iOS notification list
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+// --- API Keys & Channel/Playlist Info ---
 const YOUTUBE_API_KEY = 'AIzaSyBtc9BFVigZ0fn6IrugqhVTNk6ikjbMzH8';
 const PLAYLIST_ID = 'PL8SWO6yqWeNimurvjsEJp9z1w_roqPbRz';
+// 🔔 The Sahaj Katha channel ID (from your earlier code)
 const CHANNEL_ID = 'UCwhkvqY1koXSP-L-Ke7Y6jQ';
 
-export default function MainScreen() {
-  const [latestVideo, setLatestVideo] = useState<any>(null);
-  const [isLive, setIsLive] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [linksModalVisible, setLinksModalVisible] = useState(false);
+// ---------- Small helper ----------
+async function openUrlNormalized(url: string) {
+  const finalUrl = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  const supported = await Linking.canOpenURL(finalUrl);
+  supported ? Linking.openURL(finalUrl) : alert(`Can't open this URL: ${finalUrl}`);
+}
 
-  useEffect(() => {
-    registerForPushNotificationsAsync();
-    fetchLatestVideo();
-    checkIfChannelIsLive();
-
-    const interval = setInterval(() => {
-      checkIfChannelIsLive();
-    }, 2 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  async function fetchLatestVideo() {
-    try {
-      const response = await fetch(
-        `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${PLAYLIST_ID}&maxResults=1&key=${YOUTUBE_API_KEY}`
-      );
-      const data = await response.json();
-      if (data.items && data.items.length > 0) {
-        setLatestVideo(data.items[0]);
-      }
-    } catch (error) {
-      console.error('Error fetching latest video:', error);
-    }
-  }
-
-  async function checkIfChannelIsLive() {
-    try {
-      const response = await fetch(
-        `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${CHANNEL_ID}&eventType=live&type=video&key=${YOUTUBE_API_KEY}`
-      );
-      const data = await response.json();
-      if (data.items && data.items.length > 0) {
-        if (!isLive) {
-          Alert.alert('🔴 Live Now', 'In Sahaj Channel is now LIVE. Tap the banner to watch!');
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title: '🔴 We Are LIVE!',
-              body: 'In Sahaj Channel is now broadcasting live. Tap to join!',
-              sound: 'default',
-            },
-            trigger: null,
-          });
-        }
-        setIsLive(true);
-      } else {
-        setIsLive(false);
-      }
-    } catch (error) {
-      console.error('Error checking live status:', error);
-    }
-  }
-
-  async function registerForPushNotificationsAsync() {
-    if (Device.isDevice) {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      if (finalStatus !== 'granted') {
-        alert('Failed to get push token for notifications!');
-      }
-    } else {
-      alert('Must use physical device for Push Notifications');
-    }
-  }
-
-  async function openYouTubeLink(url: string) {
-    const supported = await Linking.canOpenURL(url);
-    if (supported) {
-      await Linking.openURL(url);
-    } else {
-      alert(`Can't open this URL: ${url}`);
-    }
-  }
-
-  const openLink = (url: string) => {
-    Linking.openURL(url);
-    setModalVisible(false);
-  };
-  
-
+// ---------- Components ----------
+function PlaylistCard({ title, url, thumbnail }: { title: string; url: string; thumbnail: ImageSourcePropType }) {
+  const handlePress = async () => openUrlNormalized(url);
   return (
-    
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF' }} edges={['left', 'right', 'top']}>
-      <AboutModal
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
-        image={require('../assets/images/maharaj-ji.jpg')} 
-        title="About Gurudev Maharaj Ji"
-        content={`Brahmgyani Mahant Baba Ram Singh Ji Maharaj is the Current Spiritual Head of Nirmal Ashram, Rishikesh—a spiritual sanctuary that welcomes all seekers and embodies the principle of ‘Love All, Serve All’.
-
-Maharaj Ji is a Brahmgyani—a fully enlightened being—whose life is dedicated to guiding humanity toward its highest purpose: Self-realisation. 
-        
-He is a pure manifestation of the Divine—imparting the fundamental truth: there is one God.
-
-At the heart of Maharaj Ji's teachings lies an emphasis on prema bhakti—wholehearted, sincere love for God, alongside the principles of nishkam sewa—selfless service and naam simran—constant meditative remembrance of the Lord.
-
-His teachings inspire us to serve everyone, embracing oneness and compassion as guiding principles on the path towards spiritual growth and the ultimate goal of human life: enlightenment, recognising oneself as the witness self, and thus finding liberation from the cycle of birth and death (moksha).
-
-Maharaj Ji embraces all beings as manifestations of the One Lord, recognising the divine presence within each individual.
-
-His eyes and entire being radiate love. Mercy is his very nature, and his heart brims with boundless compassion for all beings.
-
-To contemplate, meditate upon, and receive the blessings of such a saint is to invite purity, inspiration, and divine consciousness into one's life.
-
-ਐਸਾ ਗੁਰੁ ਵਡਭਾਗੀ ਪਾਇਆ ॥੧॥
-ऐसा गुरु वडभागी पाइआ ॥१॥
-Aesaa gur vadbhaagee paayaa. ||1||
-Such a Guru is found by great good fortune. ||1||
-Sri Guru Granth Sahib Ji, Ang 803 (GuruArjan Dev Ji in Raag Bilawal)
-        `}
-      />
-
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={true}>
-        
-        <TouchableOpacity
-          style={isLive ? styles.liveNotificationBar : styles.notificationBar}
-          onPress={() => openYouTubeLink('https://www.youtube.com/@Insahaj/live')}
-        >
-          <Text style={styles.notificationText}>
-            {isLive ? '🔴 We Are LIVE Now! Tap to Watch' : '🔔 LIVE Notifications on Sahaj Channel'}
-          </Text>
-        </TouchableOpacity>
-
-        <View style={styles.quickLinksWrapper}>
-        <TouchableOpacity onPress={() => setLinksModalVisible(true)} style={styles.quickLinksButton}>
-          <Ionicons name="globe-outline" size={22} color="#4F2613" />
-          <Text style={styles.quickLinksText}>Quick Links</Text>
-        </TouchableOpacity>
+    <TouchableOpacity style={styles.playlistCard} onPress={handlePress} activeOpacity={0.9}>
+      <View style={styles.playlistThumbWrapper}>
+        <Image source={thumbnail} style={styles.playlistThumbnail} />
       </View>
-
-
-        <View style={styles.meditationSection}>
-          <MeditationButton
-            title="Morning Meditation"
-            source={require('../assets/audio/morning-meditation.mp3')}
-          />
-          <MeditationButton
-            title="Om Satnam Simran"
-            source={require('../assets/audio/om-satnam-simran.mp3')}
-          />
-          <MeditationButton
-            title={`Naam\nSimran`}
-            source={require('../assets/audio/naam-simran.mp3')}
-          />
-        </View>
-        
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Latest Sahaj Katha</Text>
-          {latestVideo ? (
-            <TouchableOpacity
-              style={styles.videoCard}
-              onPress={() => openYouTubeLink(`https://www.youtube.com/watch?v=${latestVideo.snippet.resourceId.videoId}`)}
-            >
-              <Image
-                source={{ uri: latestVideo.snippet.thumbnails.medium.url }}
-                style={styles.videoThumbnail}
-              />
-              <Text style={styles.videoTitle}>{latestVideo.snippet.title}</Text>
-            </TouchableOpacity>
-          ) : (
-            <ActivityIndicator size="large" color="#FF9966" />
-          )}
-        </View>
-
-        <TouchableOpacity style={styles.aboutSection} onPress={() => setModalVisible(true)}>
-          <Text style={styles.aboutText}>🧡 About Gurudev Maharaj Ji</Text>
-        </TouchableOpacity>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Playlists</Text>
-          <View style={styles.playlistSection}>
-            <PlaylistCard
-              title="Divine Wisdom"
-              url="https://www.youtube.com/playlist?list=PL8SWO6yqWeNiYAmc8fsuN2K6FHbKIukZl"
-              thumbnail="https://i.ytimg.com/vi/Fwfs8m7-aQc/hqdefault.jpg"
-            />
-            <PlaylistCard
-              title="Soulful Kirtan"
-              url="https://www.youtube.com/playlist?list=PL8SWO6yqWeNhTf2dqAlH_fBql7s0PJrGL"
-              thumbnail="https://i.ytimg.com/vi/WyVWA8ZEjhA/hqdefault.jpg"
-            />
-          </View>
-        </View>
-      </ScrollView>
-      <Modal
-        transparent
-        visible={linksModalVisible}
-        animationType="fade"
-        onRequestClose={() => setLinksModalVisible(false)}
-      >
-        <TouchableOpacity
-          activeOpacity={1}
-          style={styles.modalBackground}
-          onPressOut={() => setLinksModalVisible(false)}
-        >
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>🌐 Quick Links</Text>
-
-            <TouchableOpacity onPress={() => openLink('https://whatsapp.com/channel/0029VajldkL2ZjCn7NsymG2M')}>
-              <Text style={styles.link}>💬 WhatsApp Broadcast Channel</Text>
-            </TouchableOpacity>
-            <Text style={{ fontSize: 12, marginBottom: 10, textAlign: 'center', color: '#333' }}>
-              Click on ‘Follow’ to join the channel. Tap the ‘🔔 Bell Icon’ to turn on notifications. Go to the ‘Updates’ tab at the bottom of your WhatsApp screen to view the channel and all regular updates.
-            </Text>
-
-            <TouchableOpacity onPress={() => openLink('https://www.instagram.com/in.sahaj/')}>
-              <Text style={styles.link}>📸 Instagram Channel</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={() => openLink('https://www.youtube.com/@Insahaj')}>
-              <Text style={styles.link}>▶️ YouTube Channel</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    </SafeAreaView>
+      <Text style={styles.playlistTitle}>{title}</Text>
+    </TouchableOpacity>
   );
 }
 
-function MeditationButton({ title, source }: { title: string; source: any }) {
+function MeditationButton({ title, source, icon }: { title: string; source: any; icon: string }) {
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
-
   const [isPlaying, setIsPlaying] = useState(true);
   const [position, setPosition] = useState(0);
-  const [duration, setDuration] = useState(1); // prevent div by 0
+  const [duration, setDuration] = useState(1);
+  const insets = useSafeAreaInsets();
 
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -273,7 +90,6 @@ function MeditationButton({ title, source }: { title: string; source: any }) {
         setSound(newSound);
       })();
     }
-
     return () => {
       sound?.unloadAsync();
       setSound(null);
@@ -282,17 +98,11 @@ function MeditationButton({ title, source }: { title: string; source: any }) {
 
   const handlePausePlay = async () => {
     if (!sound) return;
-    if (isPlaying) {
-      await sound.pauseAsync();
-    } else {
-      await sound.playAsync();
-    }
+    isPlaying ? await sound.pauseAsync() : await sound.playAsync();
   };
 
   const handleSeek = async (value: number) => {
-    if (sound) {
-      await sound.setPositionAsync(value);
-    }
+    if (sound) await sound.setPositionAsync(value);
   };
 
   const handleStop = async () => {
@@ -302,347 +112,431 @@ function MeditationButton({ title, source }: { title: string; source: any }) {
     setModalVisible(false);
   };
 
-
   return (
     <>
-      <TouchableOpacity style={styles.meditationButton} onPress={() => setModalVisible(true)}>
+      <TouchableOpacity style={styles.meditationButton} onPress={() => setModalVisible(true)} activeOpacity={0.85}>
+        <View style={styles.iconCircle}>
+          <Ionicons name={icon as any} size={26} color="#E27528" />
+        </View>
         <Text style={styles.meditationText}>{title}</Text>
       </TouchableOpacity>
 
       <Modal visible={modalVisible} animationType="slide" transparent>
-      <Pressable
-        onPress={() => {
-          // Stop and unload sound when clicking outside
-          if (sound) {
-            sound.stopAsync();
-            sound.unloadAsync();
-          }
-          setSound(null);
-          setModalVisible(false);
-        }}
-        style={styles.modalOverlay}
-      >
-        <Pressable onPress={() => {}} style={styles.modalContent}>
-          <Text style={styles.modalTitleText}>{title}</Text>
+        <Pressable
+          onPress={handleStop}
+          style={[styles.modalOverlay, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}
+        >
+          <Pressable onPress={() => {}} style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{title}</Text>
 
-          <Slider
-            style={styles.audioSlider}
-            minimumValue={0}
-            maximumValue={duration}
-            value={position}
-            onSlidingComplete={handleSeek}
-            minimumTrackTintColor="#FF9966"
-            maximumTrackTintColor="#ccc"
-          />
-          <Text style={styles.timeText}>
-            {formatTime(position)} / {formatTime(duration)}
-          </Text>
+            <Slider
+              style={{ width: '90%', marginTop: 12 }}
+              minimumValue={0}
+              maximumValue={duration}
+              value={position}
+              onSlidingComplete={handleSeek}
+              minimumTrackTintColor="#E27528"
+              maximumTrackTintColor="#ccc"
+            />
+            <Text style={styles.timeText}>
+              {formatTime(position)} / {formatTime(duration)}
+            </Text>
 
-          <View style={styles.audioControls}>
-            <TouchableOpacity style={styles.audioButton} onPress={handlePausePlay}>
-              <Text style={styles.audioButtonText}>
-                {isPlaying ? '⏸ Pause' : '▶️ Play'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.audioButton} onPress={handleStop}>
-              <Text style={[styles.audioButtonText, { color: '#FF4C4C' }]}>🛑 Stop</Text>
-            </TouchableOpacity>
-          </View>
+            <View style={styles.audioControls}>
+              <TouchableOpacity style={styles.audioButton} onPress={handlePausePlay}>
+                <Text style={styles.audioButtonText}>{isPlaying ? '⏸ Pause' : '▶️ Play'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.audioButton, { backgroundColor: '#FFD9B3' }]} onPress={handleStop}>
+                <Text style={[styles.audioButtonText, { color: '#E27528' }]}>🛑 Stop</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
         </Pressable>
-      </Pressable>
-    </Modal>
-
-
+      </Modal>
     </>
   );
 }
 
+// --- MainScreen ---
+export default function MainScreen() {
+  const insets = useSafeAreaInsets();
+  const [latestVideo, setLatestVideo] = useState<any>(null);
+  const [aboutVisible, setAboutVisible] = useState(false);
+  const [socialVisible, setSocialVisible] = useState(false);
 
+  // 🔔 live-detection state
+  const [isLive, setIsLive] = useState(false);
+  const [hasAlertedForThisLive, setHasAlertedForThisLive] = useState(false);
+const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // 🔔 Ask for notification permission once
+  useEffect(() => {
+    (async () => {
+      const settings = await Notifications.getPermissionsAsync();
+      if (!settings.granted) {
+        await Notifications.requestPermissionsAsync();
+      }
 
-function PlaylistCard({ title, url, thumbnail }: { title: string; url: string; thumbnail: string }) {
-  const handlePress = async () => {
-    const supported = await Linking.canOpenURL(url);
-    if (supported) {
-      await Linking.openURL(url);
-    } else {
-      alert(`Cannot open this URL: ${url}`);
+      // Android requires a channel to show notifications with sound
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.DEFAULT,
+        });
+      }
+
+      // Open live video when user taps the notification
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const url = response.notification.request.content.data?.url as string | undefined;
+        if (url) openUrlNormalized(url);
+      });
+    })();
+  }, []);
+
+  // Initial fetch for “Latest Sahaj Katha”
+  useEffect(() => {
+    fetchLatestVideo();
+  }, []);
+
+  async function fetchLatestVideo() {
+    try {
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${PLAYLIST_ID}&maxResults=1&key=${YOUTUBE_API_KEY}`
+      );
+      const data = await response.json();
+      if (data.items && data.items.length > 0) setLatestVideo(data.items[0]);
+    } catch (error) {
+      console.error('Error fetching latest video:', error);
     }
-  };
+  }
+
+  // 🔔 Poll YouTube for live status every 60s while app is active
+  useEffect(() => {
+    const startPolling = () => {
+      if (intervalRef.current) return;
+      intervalRef.current = setInterval(checkLiveAndNotify, 60000); // 60s
+      // also check immediately
+      checkLiveAndNotify();
+    };
+    const stopPolling = () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+
+    const handleAppState = (state: string) => {
+      if (state === 'active') startPolling();
+      else stopPolling(); // save battery when backgrounded
+    };
+
+    startPolling();
+    const sub = AppState.addEventListener('change', handleAppState);
+    return () => {
+      sub.remove();
+      stopPolling();
+    };
+  }, []);
+
+  // 🔔 Hit YouTube Search API for live videos on the channel
+  async function checkLiveAndNotify() {
+    try {
+      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${CHANNEL_ID}&eventType=live&type=video&maxResults=1&key=${YOUTUBE_API_KEY}`;
+      const res = await fetch(url);
+      const json = await res.json();
+
+      const goingLive = Array.isArray(json.items) && json.items.length > 0;
+      setIsLive(goingLive);
+
+      if (goingLive) {
+        const live = json.items[0];
+        const liveVideoId = live.id?.videoId as string | undefined;
+        const liveTitle = live.snippet?.title || 'Sahaj Katha is live';
+
+        // Notify once per live session
+        if (!hasAlertedForThisLive && liveVideoId) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: '🔴 Sahaj Katha is LIVE',
+              body: liveTitle,
+              data: { url: `https://www.youtube.com/watch?v=${liveVideoId}` },
+            },
+            trigger: null, // fire immediately
+          });
+          setHasAlertedForThisLive(true);
+        }
+      } else {
+        // Reset so we can alert again next time they go live
+        if (hasAlertedForThisLive) setHasAlertedForThisLive(false);
+      }
+    } catch (e) {
+      console.warn('Live check failed', e);
+    }
+  }
 
   return (
-    <TouchableOpacity style={styles.playlistCard} onPress={handlePress}>
-      <Image source={{ uri: thumbnail }} style={styles.playlistThumbnail} />
-      <Text style={styles.playlistTitle}>Listen to {title}</Text>
-      <Text style={styles.smallText}>Playlist</Text>
-    </TouchableOpacity>
-  );
-}
+    <SafeAreaView style={[styles.safeArea, { paddingTop: insets.top }]} edges={['top', 'left', 'right']}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={true}
+        contentInsetAdjustmentBehavior="automatic"
+        scrollIndicatorInsets={{ right: 1, bottom: insets.bottom }}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Meditation Buttons */}
+        <View style={styles.meditationSection}>
+          <MeditationButton
+            title="Amrit Vela Meditation"
+            source={require('../assets/audio/morning-meditation.mp3')}
+            icon="sunny-outline"
+          />
+          <MeditationButton
+            title="Om Satnam Meditation"
+            source={require('../assets/audio/om-satnam-simran.mp3')}
+            icon="musical-notes-outline"
+          />
+          <MeditationButton
+            title="Mool Mantra Meditation"
+            source={require('../assets/audio/naam-simran.mp3')}
+            icon="infinite-outline"
+          />
+        </View>
 
+        {/* About + Important Links row */}
+        <View style={styles.aboutRow}>
+          <TouchableOpacity style={[styles.aboutCard, { flex: 1 }]} onPress={() => setAboutVisible(true)}>
+            <Text style={styles.aboutCardText}>🧡 About Gurudev Maharaj Ji</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.linksButton}
+            onPress={() => setSocialVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Open important links"
+          >
+            <Ionicons name="link-outline" size={20} color="#E27528" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Latest Sahaj Katha */}
+        <View style={styles.kathaCard}>
+          <Text style={styles.kathaTitle}>
+            {isLive ? '🔴 Live Now: Sahaj Katha' : 'Latest Sahaj Katha'}
+          </Text>
+          {latestVideo ? (
+            <TouchableOpacity
+              onPress={() =>
+                openUrlNormalized(
+                  `https://www.youtube.com/watch?v=${latestVideo.snippet.resourceId.videoId}`
+                )
+              }
+              activeOpacity={0.9}
+            >
+              <View style={styles.kathaThumbWrapper}>
+                <Image source={require('../assets/images/sahaj-katha.jpg')} style={styles.kathaThumbnail} />
+              </View>
+              <Text style={styles.kathaVideoTitle}>{latestVideo.snippet.title}</Text>
+            </TouchableOpacity>
+          ) : (
+            <ActivityIndicator size="large" color="#E27528" />
+          )}
+        </View>
+
+        {/* Playlists */}
+        <View style={styles.playlistContainer}>
+          <Text style={styles.playlistHeader}>Playlists</Text>
+          <View style={styles.playlistRow}>
+            <PlaylistCard
+              title="Divine Wisdom"
+              url="https://www.youtube.com/playlist?list=PL8SWO6yqWeNiYAmc8fsuN2K6FHbKIukZl"
+              thumbnail={require('../assets/images/divine-wisdom.jpg')}
+            />
+            <PlaylistCard
+              title="Soulful Kirtan"
+              url="https://www.youtube.com/playlist?list=PL8SWO6yqWeNhTf2dqAlH_fBql7s0PJrGL"
+              thumbnail={require('../assets/images/soulful-kirtan.jpg')}
+            />
+          </View>
+        </View>
+
+        <View style={{ height: 20 }} />
+      </ScrollView>
+
+      {/* Social Links Modal */}
+      <Modal visible={socialVisible} animationType="fade" transparent>
+        <Pressable
+          onPress={() => setSocialVisible(false)}
+          style={[styles.modalOverlay, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}
+        >
+          <Pressable onPress={() => {}} style={[styles.modalContent, { alignItems: 'stretch' }]}>
+            <Text style={styles.modalTitle}>Stay Connected</Text>
+
+            <Text style={styles.modalSubtitle}>WhatsApp Broadcast Channel</Text>
+            <TouchableOpacity
+              style={styles.linkRow}
+              onPress={() => openUrlNormalized('https://whatsapp.com/channel/0029VajldkL2ZjCn7NsymG2M')}
+            >
+              <Ionicons name="logo-whatsapp" size={20} color="#E27528" />
+              <Text style={styles.linkText}>Open WhatsApp Channel</Text>
+              <Ionicons name="chevron-forward" size={18} color="#E27528" />
+            </TouchableOpacity>
+
+            <View style={styles.instructions}>
+              <Text style={styles.instructionsItem}>• Click on ‘Follow’ to join the channel.</Text>
+              <Text style={styles.instructionsItem}>• Tap the ‘🔔 Bell Icon’ to turn on notifications.</Text>
+              <Text style={styles.instructionsItem}>
+                • Go to the ‘Updates’ tab at the bottom of your WhatsApp screen to view the channel and all regular updates.
+              </Text>
+            </View>
+
+            <Text style={styles.modalSubtitle}>Instagram</Text>
+            <TouchableOpacity style={styles.linkRow} onPress={() => openUrlNormalized('https://www.instagram.com/in.sahaj/')}>
+              <Ionicons name="logo-instagram" size={20} color="#E27528" />
+              <Text style={styles.linkText}>@in.sahaj</Text>
+              <Ionicons name="chevron-forward" size={18} color="#E27528" />
+            </TouchableOpacity>
+
+            <Text style={styles.modalSubtitle}>YouTube</Text>
+            <TouchableOpacity style={styles.linkRow} onPress={() => openUrlNormalized('https://www.youtube.com/@Insahaj')}>
+              <Ionicons name="logo-youtube" size={20} color="#E27528" />
+              <Text style={styles.linkText}>youtube.com/@Insahaj</Text>
+              <Ionicons name="chevron-forward" size={18} color="#E27528" />
+            </TouchableOpacity>
+
+            <Pressable style={[styles.audioButton, { marginTop: 14 }]} onPress={() => setSocialVisible(false)}>
+              <Text style={styles.audioButtonText}>Close</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <AboutModal
+              visible={aboutVisible}
+              onClose={() => setAboutVisible(false)}
+              image={require('../assets/images/maharaj-ji.jpg')}
+              title="About Gurudev Maharaj Ji"
+              content={`Brahmgyani Mahant Baba Ram Singh Ji Maharaj is the Current Spiritual Head of Nirmal Ashram, Rishikesh—a spiritual sanctuary that welcomes all seekers and embodies the principle of ‘Love All, Serve All’.
+      
+Maharaj Ji is a Brahmgyani—a fully enlightened being—whose life is dedicated to guiding humanity toward its highest purpose: Self-realisation. 
+  
+He is a pure manifestation of the Divine—imparting the fundamental truth: there is one God.
+  
+At the heart of Maharaj Ji's teachings lies an emphasis on prema bhakti—wholehearted, sincere love for God, alongside the principles of nishkam sewa—selfless service and naam simran—constant meditative remembrance of the Lord.
+  
+His teachings inspire us to serve everyone, embracing oneness and compassion as guiding principles on the path towards spiritual growth and the ultimate goal of human life: enlightenment, recognising oneself as the witness self, and thus finding liberation from the cycle of birth and death (moksha).
+  
+Maharaj Ji embraces all beings as manifestations of the One Lord, recognising the divine presence within each individual.
+  
+His eyes and entire being radiate love. Mercy is his very nature, and his heart brims with boundless compassion for all beings.
+  
+To contemplate, meditate upon, and receive the blessings of such a saint is to invite purity, inspiration, and divine consciousness into one's life.
+  
+ਐਸਾ ਗੁਰੁ ਵਡਭਾਗੀ ਪਾਇਆ ॥੧॥
+ऐसा गुरु वडभागी पाइआ ॥१॥
+Aesaa gur vadbhaagee paayaa. ||1||
+Such a Guru is found by great good fortune. ||1||
+Sri Guru Granth Sahib Ji, Ang 803 (GuruArjan Dev Ji in Raag Bilawal)
+        `}
+            />
+          </SafeAreaView>
+        );
+  }
+
+// --- Styles (unchanged except for existing ones) ---
 const styles = StyleSheet.create({
-  container: {
-    paddingBottom: 16,
-    backgroundColor: '#FDFAF5', // Bianca
-  },
+  safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
+  container: { paddingHorizontal: 10 },
 
-  // 🔔 Notification Bars
-  notificationBar: {
-    backgroundColor: '#FDFAF5', // Papaya
-    padding: 8,
-  },
-  liveNotificationBar: {
-    backgroundColor: '#FF4C4C', // Alert Red (unchanged)
-    padding: 8,
-  },
-  notificationText: {
-    color: '#4F2613', // Bianca for strong contrast
-    textAlign: 'center',
-    fontSize: 13,
-    fontWeight: '500',
-    fontFamily: 'OpenSans-Bold',
-  },
-
-  // 🧘‍♀️ Meditation Buttons
-  meditationSection: {
-  marginTop: 16,
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  paddingHorizontal: 16,
-},
-
-meditationButton: {
-  flex: 1,
-  marginHorizontal: 4,
-  backgroundColor: '#FFFFFF', // clean white background
-  paddingVertical: 18,
-  borderRadius: 16,
-  alignItems: 'center',
-  justifyContent: 'center',
-  shadowColor: '#000',
-  shadowOpacity: 0.05,
-  shadowRadius: 4,
-  elevation: 2,
-  borderWidth: 1,
-  borderColor: '#F2F2F2',
-},
-
-meditationText: {
-  fontSize: 14,
-  fontWeight: '600',
-  color: '#333',
-  textAlign: 'center',
-},
-
-
-  // 📺 Section Headers
-  section: {
-    marginTop: 24,
-    padding: 16,
-    backgroundColor: '#FFF5EC', // Bianca variant
-    borderRadius: 12,
-    marginHorizontal: 12,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 12,
-    color: '#2E2C2B', // Birch
-    fontFamily: 'OpenSans-Bold',
-  },
-
-  // 🎥 Latest Video
-  videoCard: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  videoThumbnail: {
-    width: '100%',
-    height: 180,
-    borderRadius: 12,
-  },
-  videoTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginTop: 8,
-    textAlign: 'center',
-    color: '#4F2613', // Cork
-    fontFamily: 'NunitoSans-Regular',
-  },
-
-  // 🎶 Playlist Cards
-  playlistSection: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  playlistCard: {
-    backgroundColor: '#8076BE', // Lavender fill instead of border
-    padding: 16,
-    borderRadius: 16,
-    width: '48%',
-    alignItems: 'center',
-  },
-  playlistTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'center',
-    color: '#FDFAF5', // Bianca text
-    fontFamily: 'NunitoSans-Regular',
-  },
-  smallText: {
-    fontSize: 11,
-    color: '#FDFAF5', // Light text for lavender background
-    marginTop: 4,
-    fontFamily: 'NunitoSans-Regular',
-  },
-  playlistThumbnail: {
-    width: '100%',
-    height: 60,
-    borderRadius: 8,
+  meditationSection: { flexDirection: 'row', justifyContent: 'center', marginBottom: 20,   alignItems: 'center', },
+  meditationButton: { alignItems: 'center', width: 90, marginHorizontal: screenWidth * 0.05  },
+  iconCircle: {
+    backgroundColor: '#FFF6F0',
+    borderRadius: 50,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#FFD9B3',
     marginBottom: 8,
   },
+  meditationText: { fontSize: 12, fontWeight: '500', color: '#333', textAlign: 'center' },
 
-  // 🎛️ Audio Modal
   modalOverlay: {
-  flex: 1,
-  justifyContent: 'center',
-  alignItems: 'center',
-  backgroundColor: 'rgba(0,0,0,0.3)',
-},
-
-modalContent: {
-  backgroundColor: '#FFFFFF', // clean white
-  borderRadius: 20,
-  padding: 24,
-  width: '85%',
-  alignItems: 'center',
-  shadowColor: '#000',
-  shadowOpacity: 0.1,
-  shadowRadius: 8,
-  elevation: 4,
-},
-
-modalTitleText: {
-  fontSize: 18,
-  fontWeight: '700',
-  color: '#333',
-  marginBottom: 12,
-  textAlign: 'center',
-},
-
-audioSlider: {
-  width: '100%',
-  marginTop: 12,
-},
-
-timeText: {
-  fontSize: 13,
-  color: '#666',
-  marginTop: 4,
-},
-
-audioControls: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'space-around',
-  width: '100%',
-  marginTop: 20,
-},
-
-audioButton: {
-  backgroundColor: '#F5F5F5',
-  paddingVertical: 10,
-  paddingHorizontal: 20,
-  borderRadius: 12,
-  alignItems: 'center',
-  justifyContent: 'center',
-},
-
-audioButtonText: {
-  fontSize: 15,
-  fontWeight: '500',
-  color: '#333',
-},
-
-
-  // 🙏 About Section
-  aboutSection: {
-    backgroundColor: '#E27528', // Papaya fill instead of left border
-    marginHorizontal: 16,
-    marginVertical: 20,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  aboutText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FDFAF5', // Bianca
-    fontFamily: 'OpenSans-Bold',
-  },
-  iconContainer: {
-    position: 'absolute',
-    top: 40,
-    right: 20,
-    backgroundColor: '#f0f0f0',
-    padding: 10,
-    borderRadius: 25,
-    elevation: 5,
-  },
-  modalBackground: {
-    flex: 1,
+    flex: 1, justifyContent: 'center', alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  modalContent: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, width: '85%', alignItems: 'center' },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#333', marginBottom: 12 },
+
+  timeText: { fontSize: 13, color: '#666', marginTop: 4 },
+  audioControls: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  audioButton: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 12, backgroundColor: '#F5F5F5' },
+  audioButtonText: { fontSize: 14, fontWeight: '500' },
+
+  aboutRow: { flexDirection: 'row', alignItems: 'stretch', gap: 10, paddingHorizontal: 16, marginBottom: 20 },
+  aboutCard: {
+    backgroundColor: '#FFF6F0',
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFD9B3',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    flexDirection: 'row',
+    justifyContent: 'center',
   },
-  modalCard: {
-    backgroundColor: 'white',
-    padding: 20,
-    borderRadius: 12,
-    width: 260,
-    elevation: 5,
+  aboutCardText: { fontSize: 15, fontWeight: '600', color: '#E27528', textAlign: 'center' },
+  linksButton: {
+    width: 52, borderRadius: 16, backgroundColor: '#FFF6F0', borderWidth: 1, borderColor: '#FFD9B3',
+    alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  link: {
-    fontSize: 16,
-    marginVertical: 8,
-    color: '#007bff',
-    textAlign: 'center',
-  },
-  quickLinksWrapper: {
-  alignItems: 'center',
-  marginTop: 14,
-  marginBottom: 10,
-},
 
-quickLinksButton: {
-  width: '92%',
-  backgroundColor: '#FFFFFF', // pure white card
-  paddingVertical: 14,
-  borderRadius: 14,
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  shadowColor: '#000',
-  shadowOpacity: 0.05,
-  shadowRadius: 4,
-  elevation: 2,
-  borderWidth: 1,
-  borderColor: '#F0F0F0', // subtle border for separation
-},
+  kathaCard: {
+    backgroundColor: '#FFF6F0',
+    borderRadius: 20,
+    padding: 14,
+    marginHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#FFD9B3',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  kathaTitle: { fontSize: 16, fontWeight: '700', color: '#E27528', textAlign: 'center', marginBottom: 10 },
+  kathaThumbWrapper: { width: '100%', aspectRatio: 16 / 9, borderRadius: 14, overflow: 'hidden' },
+  kathaThumbnail: { width: '100%', height: '100%', resizeMode: 'cover' },
+  kathaVideoTitle: { fontSize: 13, fontWeight: '500', color: '#333', textAlign: 'center', marginTop: 8 },
 
-quickLinksText: {
-  marginLeft: 10,
-  fontSize: 15,
-  fontWeight: '600',
-  color: '#333',
-},
+  playlistContainer: { marginTop: 20, marginHorizontal: 16 },
+  playlistHeader: { fontSize: 16, fontWeight: '700', color: '#E27528', marginBottom: 12 },
+  playlistRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  playlistCard: {
+    backgroundColor: '#FFF6F0',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FFD9B3',
+    padding: 10,
+    alignItems: 'center',
+    width: '48%',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  playlistThumbWrapper: { width: '100%', aspectRatio: 16 / 9, borderRadius: 12, overflow: 'hidden' },
+  playlistThumbnail: { width: '100%', height: '100%', resizeMode: 'cover' },
+  playlistTitle: { fontSize: 13, fontWeight: '500', color: '#333', textAlign: 'center' },
 
-  
+  modalSubtitle: { fontSize: 14, fontWeight: '700', color: '#E27528', marginTop: 6, marginBottom: 6 },
+  linkRow: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF6F0',
+    borderRadius: 14, borderWidth: 1, borderColor: '#FFD9B3', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 10,
+  },
+  linkText: { flex: 1, marginLeft: 10, fontSize: 14, fontWeight: '600', color: '#333' },
+  instructions: { backgroundColor: '#FFFAF5', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#FFE7CC', marginBottom: 10 },
+  instructionsItem: { fontSize: 12, color: '#555', marginBottom: 4 },
 });
-

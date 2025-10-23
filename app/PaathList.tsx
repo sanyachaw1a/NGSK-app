@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -11,6 +11,8 @@ import {
   Modal,
   Pressable,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from './_layout';
@@ -20,63 +22,87 @@ type PaathListNavProp = NativeStackNavigationProp<
   'PaathScreen'
 >;
 
+const FAV_KEY = 'paath_favorites_v1';
+
 export default function PaathList() {
   const navigation = useNavigation<PaathListNavProp>();
+  const insets = useSafeAreaInsets();
 
   const paaths = [
-    'Japji Sahib',
-    'Sukhmani Sahib',
-    'Shlok Mahala 9',
-    'Kirtan Sohila',
-    'Shabad Hazare',
-    'Anand Sahib',
-    'Chaupai Sahib',
-    'Rehraas Sahib',
-    'Barah Maha Manjh',
-    'Aarti',
-    'Sidh Gosht',
-    'Bavan Akhri',
-    'Dakhni Oankar',
-    'Dukh Banjani Sahib',
-    'Asa Di Vaar',
-    'Bhagat Bani',
-    'Bai Vaaran',
-    'Sahaskriti Shlok',
-    'Savaiye',
+    'ਜਪੁਜੀ ਸਾਹਿਬ | Japji Sahib',
+    'ਸੁਖਮਨੀ ਸਾਹਿਬ | Sukhmani Sahib',
+    'ਸਲੋਕ ਮਹਲਾ ੯ | Shlok Mahala 9',
+    'ਕੀਰਤਨ ਸੋਹਿਲਾ | Kirtan Sohila',
+    'ਸ਼ਬਦ ਹਜ਼ਾਰੇ | Shabad Hazare',
+    'ਆਨੰਦ ਸਾਹਿਬ | Anand Sahib',
+    'ਚੌਪਈ ਸਾਹਿਬ | Chaupai Sahib',
+    'ਰਹਿਰਾਸ ਸਾਹਿਬ | Rehraas Sahib',
+    'ਬਾਰਹ ਮਾਹਾ ਮਾਂਝ | Barah Maha Manjh',
+    'ਆਰਤੀ | Aarti',
+    'ਸਿਧ ਗੋਸਟਿ | Sidh Gosht',
+    'ਬਾਵਨ ਅਖਰੀ | Bavan Akhri',
+    'ਦਖਣੀ ਓਅੰਕਾਰੁ | Dakhni Oankar',
+    'ਦੁਖ ਭੰਜਨੀ ਸਾਹਿਬ | Dukh Banjani Sahib',
+    'ਆਸਾ ਦੀ ਵਾਰ | Asa Di Vaar',
   ];
 
   const [query, setQuery] = useState('');
   const [aboutVisible, setAboutVisible] = useState(false);
 
+  // ⭐ Favorites state (persisted)
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [showOnlyFavs, setShowOnlyFavs] = useState(false);
+
+  // Load favorites on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(FAV_KEY);
+        if (raw) {
+          const arr: string[] = JSON.parse(raw);
+          setFavorites(new Set(arr));
+        }
+      } catch {}
+    })();
+  }, []);
+
+  // Persist favorites whenever they change
+  useEffect(() => {
+    (async () => {
+      try {
+        await AsyncStorage.setItem(FAV_KEY, JSON.stringify(Array.from(favorites)));
+      } catch {}
+    })();
+  }, [favorites]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return paaths;
-    return paaths.filter((p) => p.toLowerCase().includes(q));
-  }, [query, paaths]);
+    const base = q ? paaths.filter((p) => p.toLowerCase().includes(q)) : paaths;
+    return showOnlyFavs ? base.filter((p) => favorites.has(p)) : base;
+  }, [query, paaths, showOnlyFavs, favorites]);
 
   const handlePress = (paathName: string) => {
     navigation.navigate('PaathDetail', { paathName });
   };
 
+  const toggleFavorite = (name: string) => {
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      next.has(name) ? next.delete(name) : next.add(name);
+      return next;
+    });
+  };
+
   return (
     <SafeAreaView
-              style={[styles.safeArea, { paddingTop: useSafeAreaInsets().top}]}
-              edges={['top', 'left', 'right']}
+      style={[styles.safeArea, { paddingTop: insets.top }]}
+      edges={['top', 'left', 'right']}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header row with About modal trigger */}
-        <View style={styles.headerRow}>
-          <Text style={styles.header}>Paath Collection</Text>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="About this list"
-            onPress={() => setAboutVisible(true)}
-            style={styles.infoPill}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.infoPillText}>About</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.header}>Paath List</Text>
+        
+
 
         {/* Search bar */}
         <View style={styles.searchWrap}>
@@ -92,35 +118,81 @@ export default function PaathList() {
             returnKeyType="search"
           />
           {query.length > 0 && (
-            <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity
+              onPress={() => setQuery('')}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel="Clear search"
+            >
               <Text style={styles.clear}>✕</Text>
             </TouchableOpacity>
           )}
         </View>
 
+        {/* Filter pills: All / Favorites */}
+        <View style={styles.filtersRow}>
+          <TouchableOpacity
+            style={[styles.filterPill, !showOnlyFavs && styles.filterPillActive]}
+            onPress={() => setShowOnlyFavs(false)}
+            accessibilityLabel="Show all paaths"
+          >
+            <Text style={[styles.filterText, !showOnlyFavs && styles.filterTextActive]}>All</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterPill, showOnlyFavs && styles.filterPillActive]}
+            onPress={() => setShowOnlyFavs(true)}
+            accessibilityLabel="Show favorite paaths"
+          >
+            <Ionicons
+              name={showOnlyFavs ? 'star' : 'star-outline'}
+              size={14}
+              color={showOnlyFavs ? PRIMARY : SUBTLE}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.filterText, showOnlyFavs && styles.filterTextActive]}>Favorites</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* List */}
         <View style={styles.list}>
-          {filtered.map((paath, i) => (
-            <TouchableOpacity
-              key={i}
-              style={styles.row}
-              onPress={() => handlePress(paath)}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${paath}`}
-            >
-              <View style={styles.textWrap}>
-                <Text style={styles.title}>{paath}</Text>
-                <Text style={styles.hint}>Tap to read</Text>
+          {filtered.map((paath, i) => {
+            const isFav = favorites.has(paath);
+            return (
+              <View key={i} style={styles.row}>
+                <TouchableOpacity
+                  style={styles.textWrap}
+                  onPress={() => handlePress(paath)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${paath}`}
+                >
+                  <Text style={styles.title}>{paath}</Text>
+                  <Text style={styles.hint}>Tap to read</Text>
+                </TouchableOpacity>
+
+                {/* Favorite star */}
+                <TouchableOpacity
+                  onPress={() => toggleFavorite(paath)}
+                  accessibilityRole="button"
+                  accessibilityLabel={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={styles.starHitbox}
+                >
+                  <Ionicons
+                    name={isFav ? 'star' : 'star-outline'}
+                    size={22}
+                    color={isFav ? PRIMARY : SUBTLE}
+                  />
+                </TouchableOpacity>
+
+                <Text style={styles.chev}>›</Text>
               </View>
-              <Text style={styles.chev}>›</Text>
-            </TouchableOpacity>
-          ))}
+            );
+          })}
 
           {filtered.length === 0 && (
             <View style={styles.empty}>
               <Text style={styles.emptyText}>
-                No matches. Try another term.
+                {showOnlyFavs ? 'No favorites yet.' : 'No matches. Try another term.'}
               </Text>
             </View>
           )}
@@ -141,7 +213,8 @@ export default function PaathList() {
             <Text style={styles.modalTitle}>About this list</Text>
             <Text style={styles.modalBody}>
               Browse commonly read Nitnem and other paaths. Use the search bar to
-              quickly filter the list. Tap any item to open its details.
+              quickly filter the list. Tap any item to open its details. You can also
+              tap the star icon to mark a paath as a favorite and filter to view only favorites.
             </Text>
 
             <Pressable style={styles.modalCloseBtn} onPress={() => setAboutVisible(false)}>
@@ -163,15 +236,11 @@ const TEXT = '#1F2328';
 const SUBTLE = '#6B7280';
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: BG,
-    
-  },
+  safeArea: { flex: 1, backgroundColor: BG },
+
   scrollContent: {
     paddingHorizontal: 30,
     paddingBottom: 30,
-
   },
 
   headerRow: {
@@ -185,6 +254,8 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     color: PRIMARY,
+    marginBottom: 10,
+
   },
   infoPill: {
     paddingHorizontal: 10,
@@ -210,7 +281,7 @@ const styles = StyleSheet.create({
     borderColor: BORDER,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    marginBottom: 14,
+    marginBottom: 10,
     gap: 8,
   },
   searchIcon: {
@@ -228,6 +299,35 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
   },
 
+  /* Filters */
+  filtersRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  filterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#F7F6FF',
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  filterPillActive: {
+    backgroundColor: '#ECE8FF',
+    borderColor: PRIMARY,
+  },
+  filterText: {
+    color: SUBTLE,
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  filterTextActive: {
+    color: PRIMARY,
+  },
+
   /* List */
   list: {
     gap: 10,
@@ -238,13 +338,13 @@ const styles = StyleSheet.create({
     backgroundColor: BG,
     borderRadius: 14,
     paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: BORDER,
   },
   textWrap: {
     flex: 1,
-    paddingRight: 10,
+    paddingRight: 8,
   },
   title: {
     fontSize: 15,
@@ -255,6 +355,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
     color: PRIMARY,
+  },
+  starHitbox: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    marginRight: 6,
+    borderRadius: 10,
   },
   chev: {
     fontSize: 24,
@@ -291,8 +397,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BORDER,
   },
-  safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
-
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',

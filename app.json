@@ -1,10 +1,10 @@
 {
   "expo": {
     "name": "NGSK",
-    "slug": "NGSK",
-    "version": "3.0.0",
+    "slug": "NGSK-app",
+    "version": "10.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/new-logo-ios.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -13,25 +13,46 @@
       "buildNumber": "1",
       "bundleIdentifier": "com.ngsk.NGSKapp",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }    },
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["audio"]   
+      }
+    },
     "android": {
+      "icon": "./assets/images/new-logo.png",
       "intentFilters": [
         {
           "action": "VIEW",
           "data": [
-            { "scheme": "https", "host": "www.youtube.com" },
-            { "scheme": "https", "host": "youtube.com" }
+            {
+              "scheme": "https",
+              "host": "www.youtube.com"
+            },
+            {
+              "scheme": "https",
+              "host": "youtube.com"
+            }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/new-logo-transp.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.ngsk.NGSKapp",
-      "versionCode": 1 
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.POST_NOTIFICATIONS"  
+      ],
+      "foregroundService": {
+        "type": "mediaPlayback",
+        "notificationChannelName": "Playback"
+      }
     },
     "web": {
       "bundler": "metro",
@@ -40,10 +61,11 @@
     },
     "plugins": [
       "expo-router",
+      
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/icon-transparent.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
@@ -65,9 +87,8 @@
       }
     },
     "owner": "ngsk",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+
+    "runtimeVersion": "8.0.0",
     "updates": {
       "url": "https://u.expo.dev/b28cb3bc-c891-449c-9a93-c870cec2838a"
     }
