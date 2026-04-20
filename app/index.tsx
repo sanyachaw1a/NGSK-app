@@ -418,7 +418,7 @@ export default function MainScreen() {
             title="ਓਮ ਸਤਿਨਾਮੁ"
             subtitle="Om Satnam"
             source={require('../assets/audio/om-satnam-simran.mp3')}
-            gradientColors={['#EEF4F3', '#4A8C85']}
+            gradientColors={['#FFF8F2', '#F2A65A']}
             C={C} theme={styles}
           />
         </View>
