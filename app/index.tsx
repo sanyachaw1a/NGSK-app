@@ -176,7 +176,7 @@ function MeditationButton({ title, subtitle, source, C, theme }: {
     <>
       <TouchableOpacity style={theme.meditationButton} onPress={() => setModalVisible(true)} activeOpacity={0.85}>
         <LinearGradient
-          colors={[C.ivory, C.ivoryDeep]}
+          colors={['#FFFBF5', '#E8CEAC']}
           start={{ x: 0.2, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={theme.iconCircle}
