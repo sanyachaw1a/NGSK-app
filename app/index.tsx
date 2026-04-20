@@ -136,8 +136,8 @@ function PlaylistCard({ title, url, thumbnail, theme }: {
 }
 
 // ── MeditationButton ──────────────────────────────────────────────────────────
-function MeditationButton({ title, subtitle, source, C, theme }: {
-  title: string; subtitle: string; source: any; C: Colors; theme: ReturnType<typeof makeStyles>;
+function MeditationButton({ title, subtitle, source, gradientColors, C, theme }: {
+  title: string; subtitle: string; source: any; gradientColors: [string, string]; C: Colors; theme: ReturnType<typeof makeStyles>;
 }) {
   const [sound, setSound]               = useState<Audio.Sound | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -176,7 +176,7 @@ function MeditationButton({ title, subtitle, source, C, theme }: {
     <>
       <TouchableOpacity style={theme.meditationButton} onPress={() => setModalVisible(true)} activeOpacity={0.85}>
         <LinearGradient
-          colors={['#FFFBF5', '#E8CEAC']}
+          colors={gradientColors}
           start={{ x: 0.2, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={theme.iconCircle}
@@ -404,18 +404,21 @@ export default function MainScreen() {
             title="ਸਤਿਨਾਮ ਵਾਹਿਗੁਰੂ"
             subtitle="Satnam Waheguru"
             source={require('../assets/audio/Satnam-Waheguru-MJ.mp3')}
+            gradientColors={['#FFF5EC', '#F2A65A']}
             C={C} theme={styles}
           />
           <MeditationButton
             title="ਮੂਲ ਮੰਤਰ"
             subtitle="Mul Mantra"
             source={require('../assets/audio/naam-simran.mp3')}
+            gradientColors={['#FFFAEE', '#C89B3C']}
             C={C} theme={styles}
           />
           <MeditationButton
             title="ਓਮ ਸਤਿਨਾਮੁ"
             subtitle="Om Satnam"
             source={require('../assets/audio/om-satnam-simran.mp3')}
+            gradientColors={['#EEF4F3', '#4A8C85']}
             C={C} theme={styles}
           />
         </View>
