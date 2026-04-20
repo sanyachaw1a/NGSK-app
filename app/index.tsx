@@ -392,8 +392,10 @@ export default function MainScreen() {
           </View>
         </View>
 
-        {/* ── Date / greeting ── */}
-        <Text style={styles.dateLine}>{dateLabel} · {timeLabel}</Text>
+        {/* ── About Nirmal Ashram button ── */}
+        <TouchableOpacity onPress={() => setNirmalVisible(true)} activeOpacity={0.7} style={styles.ashramButton}>
+          <Text style={styles.ashramButtonText}>About Nirmal Ashram Rishikesh</Text>
+        </TouchableOpacity>
         <Text style={styles.heroLine}>
           Begin in <Text style={styles.heroItalic}>{heroWord}</Text>
         </Text>
@@ -618,10 +620,16 @@ function makeStyles(C: Colors) { return StyleSheet.create({
     backgroundColor: C.parchment, alignItems: 'center', justifyContent: 'center',
   },
 
-  // Date + hero
-  dateLine: {
-    fontFamily: 'Inter-SemiBold', fontSize: 11, color: C.saffron,
-    letterSpacing: 1.5, marginTop: 12, marginBottom: 6,
+  // About button
+  ashramButton: {
+    alignSelf: 'flex-start',
+    marginTop: 12, marginBottom: 6,
+    paddingVertical: 5, paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1, borderColor: C.saffron,
+  },
+  ashramButtonText: {
+    fontFamily: 'Inter-SemiBold', fontSize: 11, color: C.saffron, letterSpacing: 1,
   },
   heroLine:   { fontFamily: 'Fraunces-Regular', fontSize: 34, lineHeight: 40, color: C.teal, marginBottom: 24 },
   heroItalic: { fontFamily: 'Fraunces-LightItalic', fontSize: 34, lineHeight: 40, color: C.saffron },
