@@ -127,10 +127,10 @@ function PlaylistCard({ title, url, thumbnail, theme }: {
 }) {
   return (
     <TouchableOpacity style={theme.playlistCard} onPress={() => openSmartUrl(url)} activeOpacity={0.9}>
-      <View style={theme.playlistThumbWrapper}>
-        <Image source={thumbnail} style={theme.playlistThumbnail} />
+      <Image source={thumbnail} style={theme.playlistThumbnail} />
+      <View style={theme.playlistOverlay}>
+        <Text style={theme.playlistTitle}>{title}</Text>
       </View>
-      <Text style={theme.playlistTitle}>{title}</Text>
     </TouchableOpacity>
   );
 }
@@ -715,19 +715,22 @@ function makeStyles(C: Colors) { return StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'baseline', marginBottom: 12,
   },
-  playlistHeader: { fontFamily: 'Fraunces-SemiBold', fontSize: 22, color: C.ink },
+  playlistHeader: { fontFamily: 'Fraunces-Regular', fontSize: 22, color: C.ink },
   seeAll:         { fontFamily: 'Inter-Medium', fontSize: 13, color: C.saffron },
   playlistRow:    { flexDirection: 'row', justifyContent: 'space-between' },
   playlistCard: {
-    backgroundColor: C.parchment, borderRadius: 16,
-    borderWidth: 1, borderColor: C.ivoryDeep,
-    overflow: 'hidden', width: '48%',
+    borderRadius: 16, overflow: 'hidden', width: '48%', aspectRatio: 16 / 9,
   },
-  playlistThumbWrapper: { width: '100%', aspectRatio: 16 / 9 },
-  playlistThumbnail:    { width: '100%', height: '100%', resizeMode: 'cover' },
+  playlistThumbnail: {
+    ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', resizeMode: 'cover',
+  },
+  playlistOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(14,30,26,0.45)',
+    justifyContent: 'flex-end', padding: 10,
+  },
   playlistTitle: {
-    fontFamily: 'Inter-Medium', fontSize: 13, color: C.ink,
-    textAlign: 'center', padding: 10,
+    fontFamily: 'Fraunces-SemiBold', fontSize: 14, color: '#FFFFFF',
   },
 
   // Modals shared
