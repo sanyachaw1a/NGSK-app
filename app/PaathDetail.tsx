@@ -1,11 +1,11 @@
-// PaathDetail.tsx — SQLite-backed (JSON fallback on first launch)
-import React, { useEffect, useMemo, useState } from 'react';
+// PaathDetail.tsx — SQLite-backed with virtualized FlatList
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ActivityIndicator,
-  ScrollView,
+  FlatList,
   SafeAreaView,
   Pressable,
   AccessibilityInfo,
@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { RootStackParamList } from './_layout';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getVersesByTokens, isTokenSeeded, type VerseRow } from '../lib/db';
 
 type PaathDetailRouteProp = RouteProp<RootStackParamList, 'PaathDetail'>;
@@ -56,33 +55,6 @@ const LOCAL_BY_TOKEN: Record<string, any> = {
   savaiye:          require('../assets/paath/savaiye.json'),
   bhagatbani:       require('../assets/paath/bhagat_bani_-_shlok_kabir_ji_ke.json'),
 };
-
-/* ---------- AsyncStorage cache (quick re-open) ---------- */
-const CACHE_KEY = 'paath_detail_cache_v1';
-const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
-
-type CacheEntry = { name: string; updatedAt: number; verses: VerseData[]; };
-
-async function loadCache(): Promise<CacheEntry[]> {
-  try {
-    const raw = await AsyncStorage.getItem(CACHE_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw) as CacheEntry[];
-    return Array.isArray(arr) ? arr.filter(e => e?.name && Array.isArray(e?.verses)) : [];
-  } catch { return []; }
-}
-async function saveCache(entries: CacheEntry[]): Promise<void> {
-  try {
-    const sorted = [...entries].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 2);
-    await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(sorted));
-  } catch {}
-}
-function getFromCache(entries: CacheEntry[], name: string) {
-  return entries.find(e => e.name === name);
-}
-function isFresh(entry: CacheEntry) {
-  return Date.now() - entry.updatedAt < CACHE_TTL_MS;
-}
 
 /* ---------- Display name -> SQLite token(s) ---------- */
 const paathToToken: Record<string, string | string[]> = {
@@ -140,48 +112,124 @@ function jsonFallback(tokens: string[]): VerseData[] {
   return out;
 }
 
-/**
- * Load verses for a paath name.
- * Reads from SQLite when seeded; falls back to bundled JSON on first launch.
- */
 async function getVerses(paathName: string): Promise<VerseData[]> {
   const mapping = paathToToken[paathName];
   if (!mapping) throw new Error(`No token mapping for "${paathName}"`);
-
   const tokens = Array.isArray(mapping) ? mapping : [mapping];
-
   const seededFlags = await Promise.all(tokens.map(isTokenSeeded));
   if (seededFlags.every(Boolean)) {
     const rows = await getVersesByTokens(tokens);
     return rows.map(rowToVerseData);
   }
-
-  // First-launch fallback: read from bundled JSON
   const fallback = jsonFallback(tokens);
   if (fallback.length) return fallback;
-
   throw new Error(`No verses found for "${paathName}"`);
+}
+
+/* ---------- Visraam (module-level so renderItem doesn't recreate them) ---------- */
+const VISRAAM_COLORS: Record<string, string> = { v: '#e28324ff', y: '#69a33fff', m: '#69a33fff' };
+
+function pickVisraam(v?: Visraam): VisraamMark[] {
+  if (!v) return [];
+  if (v.igurbani?.length) return v.igurbani;
+  if (v.sttm?.length) return v.sttm;
+  if (v.sttm2?.length) return v.sttm2;
+  return [];
 }
 
 /* ---------- Fonts ---------- */
 const FONTS = {
-  gurmukhi: Platform.select({ ios: 'Gurmukhi MN', android: 'NotoSansGurmukhi-Regular' }),
+  gurmukhi:   Platform.select({ ios: 'Gurmukhi MN', android: 'NotoSansGurmukhi-Regular' }),
   devanagari: Platform.select({ ios: 'Times New Roman', android: 'NotoSansDevanagari-Regular' }),
 };
 
+/* ---------- GurmukhiWithVisraam (module-level — no captures from component state) ---------- */
+function GurmukhiWithVisraam({ text, marks, fs }: { text: string; marks: VisraamMark[]; fs: number }) {
+  const words = text.split(/\s+/);
+  const map = new Map<number, string>();
+  marks.forEach(m => {
+    const idx = typeof m.p === 'string' ? parseInt(m.p as string, 10) : (m.p as number);
+    if (!Number.isNaN(idx)) map.set(idx, m.t);
+  });
+  const base = {
+    fontSize: fs, lineHeight: Math.ceil(fs * 1.5), color: TEXT,
+    paddingVertical: 2, includeFontPadding: true, fontFamily: FONTS.gurmukhi as string,
+  } as const;
+  return (
+    <Text style={[styles.gurmukhi, base]} maxFontSizeMultiplier={2.2}>
+      {words.map((w, i) => {
+        const t = map.get(i);
+        const colored = t && VISRAAM_COLORS[t];
+        const piece = w + (i < words.length - 1 ? ' ' : '');
+        return (
+          <Text key={i} style={[{ fontFamily: FONTS.gurmukhi as string }, colored ? { color: colored, fontWeight: '700' } : null]}>
+            {piece}
+          </Text>
+        );
+      })}
+    </Text>
+  );
+}
+
+/* ---------- VerseItem (module-level component for stable FlatList rendering) ---------- */
+interface VerseItemProps {
+  verse: VerseData;
+  fontSize: number;
+  minSize: number;
+  showGurmukhi: boolean;
+  showHindi: boolean;
+  showEnglish: boolean;
+}
+
+const VerseItem = React.memo(function VerseItem({
+  verse: v, fontSize, minSize, showGurmukhi, showHindi, showEnglish,
+}: VerseItemProps) {
+  const gurmukhi      = v.verse?.verse?.unicode || v.verse?.verse?.gurmukhi || '';
+  const transliteration = v.verse?.transliteration?.hindi || '';
+  const translation   =
+    v.verse?.translation?.en?.ssk ||
+    v.verse?.translation?.en?.ms  ||
+    v.verse?.translation?.en?.bdb || '';
+  const visraamMarks  = pickVisraam(v.verse?.visraam);
+
+  return (
+    <View style={styles.verseBlock}>
+      {showGurmukhi && !!gurmukhi && (
+        <GurmukhiWithVisraam text={gurmukhi} marks={visraamMarks} fs={fontSize} />
+      )}
+      {showHindi && !!transliteration && (
+        <Text
+          style={[styles.transliteration, { fontSize: Math.max(minSize, fontSize - 4), lineHeight: Math.ceil(Math.max(minSize, fontSize - 4) * 1.35) }]}
+          maxFontSizeMultiplier={2.0}
+        >
+          {transliteration}
+        </Text>
+      )}
+      {showEnglish && !!translation && (
+        <Text
+          style={[styles.translation, { fontSize: Math.max(minSize, fontSize - 8), lineHeight: Math.ceil(Math.max(minSize, fontSize - 8) * 1.35) }]}
+          maxFontSizeMultiplier={2.0}
+        >
+          {translation}
+        </Text>
+      )}
+    </View>
+  );
+});
+
+/* ========== Main screen ========== */
 export default function PaathDetail() {
   const route = useRoute<PaathDetailRouteProp>();
   const { paathName } = route.params;
 
-  const [loading, setLoading] = useState(true);
-  const [verses, setVerses] = useState<VerseData[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  const [fontSize, setFontSize] = useState(22);
+  const [loading, setLoading]       = useState(true);
+  const [verses, setVerses]         = useState<VerseData[]>([]);
+  const [error, setError]           = useState<string | null>(null);
+  const [fontSize, setFontSize]     = useState(22);
   const MIN_SIZE = 12, MAX_SIZE = 40;
   const [showGurmukhi, setShowGurmukhi] = useState(true);
-  const [showHindi, setShowHindi] = useState(true);
-  const [showEnglish, setShowEnglish] = useState(true);
+  const [showHindi, setShowHindi]       = useState(true);
+  const [showEnglish, setShowEnglish]   = useState(true);
 
   const announceSize = (dir: 'larger' | 'smaller') =>
     AccessibilityInfo.announceForAccessibility?.(dir === 'larger' ? 'Text larger' : 'Text smaller');
@@ -190,83 +238,96 @@ export default function PaathDetail() {
 
   useEffect(() => {
     let cancelled = false;
-
     (async () => {
       setLoading(true);
       setError(null);
-
-      // 1) AsyncStorage cache for instant re-opens
-      const cache = await loadCache();
-      const cached = getFromCache(cache, paathName);
-      if (cached && isFresh(cached)) {
-        if (!cancelled) { setVerses(cached.verses); setLoading(false); }
-        return;
-      }
-
-      // 2) SQLite (or JSON fallback on first launch)
       try {
         const loaded = await getVerses(paathName);
-        if (!cancelled) {
-          setVerses(loaded);
-          setLoading(false);
-        }
-        const updated: CacheEntry = { name: paathName, verses: loaded, updatedAt: Date.now() };
-        const next = cached
-          ? cache.map(e => e.name === paathName ? updated : e)
-          : [updated, ...cache];
-        await saveCache(next);
+        if (!cancelled) { setVerses(loaded); setLoading(false); }
       } catch (e: any) {
-        if (!cancelled) {
-          setError(e?.message || 'Could not load this paath.');
-          setVerses([]);
-          setLoading(false);
-        }
+        if (!cancelled) { setError(e?.message || 'Could not load this paath.'); setLoading(false); }
       }
     })();
-
     return () => { cancelled = true; };
   }, [paathName]);
 
-  const verseCount = useMemo(() => verses.length, [verses]);
+  /* Only include verses that have something to show given current toggles */
+  const displayVerses = useMemo(() =>
+    verses.filter(v => {
+      const g = v.verse?.verse?.unicode || v.verse?.verse?.gurmukhi;
+      const h = v.verse?.transliteration?.hindi;
+      const e = v.verse?.translation?.en?.ssk || v.verse?.translation?.en?.ms || v.verse?.translation?.en?.bdb;
+      return (showGurmukhi && !!g) || (showHindi && !!h) || (showEnglish && !!e);
+    }),
+    [verses, showGurmukhi, showHindi, showEnglish]
+  );
 
-  /* ===== Visraam helpers ===== */
-  const VISRAAM_COLORS: Record<string, string> = { v: '#e28324ff', y: '#69a33fff', m: '#69a33fff' };
-  const pickVisraam = (v?: Visraam): VisraamMark[] => {
-    if (!v) return [];
-    if (v.igurbani && v.igurbani.length) return v.igurbani;
-    if (v.sttm && v.sttm.length) return v.sttm;
-    if (v.sttm2 && v.sttm2.length) return v.sttm2;
-    return [];
-  };
+  const extraData = useMemo(
+    () => ({ fontSize, showGurmukhi, showHindi, showEnglish }),
+    [fontSize, showGurmukhi, showHindi, showEnglish]
+  );
 
-  const GurmukhiWithVisraam = ({ text, marks, fs }: { text: string; marks: VisraamMark[]; fs: number }) => {
-    const words = text.split(/\s+/);
-    const map = new Map<number, string>();
-    marks.forEach(m => {
-      const idx = typeof m.p === 'string' ? parseInt(m.p as string, 10) : (m.p as number);
-      if (!Number.isNaN(idx)) map.set(idx, m.t);
-    });
+  const renderItem = useCallback(({ item }: { item: VerseData }) => (
+    <VerseItem
+      verse={item}
+      fontSize={fontSize}
+      minSize={MIN_SIZE}
+      showGurmukhi={showGurmukhi}
+      showHindi={showHindi}
+      showEnglish={showEnglish}
+    />
+  ), [fontSize, showGurmukhi, showHindi, showEnglish]);
 
-    const base = {
-      fontSize: fs, lineHeight: Math.ceil(fs * 1.5), color: TEXT, paddingVertical: 2, includeFontPadding: true,
-      fontFamily: FONTS.gurmukhi as string,
-    } as const;
+  const Separator = useCallback(() => <View accessible style={styles.divider} />, []);
 
+  const ListHeader = useMemo(() => {
+    const parts = paathName.split(' | ');
+    const gurmukhiTitle = parts[0] || paathName;
+    const englishTitle  = parts[1] || '';
     return (
-      <Text style={[styles.gurmukhi, base]} maxFontSizeMultiplier={2.2}>
-        {words.map((w, i) => {
-          const t = map.get(i);
-          const colored = t && VISRAAM_COLORS[t];
-          const piece = w + (i < words.length - 1 ? ' ' : '');
-          return (
-            <Text key={i} style={[{ fontFamily: FONTS.gurmukhi as string }, colored ? { color: colored, fontWeight: '700' } : null]}>
-              {piece}
-            </Text>
-          );
-        })}
-      </Text>
+      <View>
+        {/* Header card */}
+        <View style={styles.headerCard}>
+          <Text style={styles.titleGurmukhi}>{gurmukhiTitle}</Text>
+          {!!englishTitle && <Text style={styles.titleEnglish}>{englishTitle}</Text>}
+          <View style={styles.headerDivider} />
+          <Text style={styles.headerStats}>
+            {verses.length > 0 ? `${verses.length} VERSES` : 'NO VERSES AVAILABLE'}
+          </Text>
+        </View>
+
+        {/* Toolbar */}
+        <View style={styles.toolbar} accessibilityRole="toolbar" accessible>
+          <View style={styles.ttLogo}>
+            <Text style={styles.ttSmall}>T</Text>
+            <Text style={styles.ttLarge}>T</Text>
+          </View>
+          <View style={styles.toolbarBtns}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Decrease text size" onPress={decreaseFont} style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]} hitSlop={8}>
+              <Text style={styles.toolbarBtnText} allowFontScaling={false}>−</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Increase text size" onPress={increaseFont} style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]} hitSlop={8}>
+              <Text style={styles.toolbarBtnText} allowFontScaling={false}>+</Text>
+            </Pressable>
+          </View>
+          <View style={styles.toggleGroup} accessibilityRole="tablist">
+            <ToggleChip label="Gurmukhi" active={showGurmukhi} onPress={() => setShowGurmukhi(v => !v)} />
+            <ToggleChip label="Hindi"    active={showHindi}    onPress={() => setShowHindi(v => !v)} />
+            <ToggleChip label="English"  active={showEnglish}  onPress={() => setShowEnglish(v => !v)} />
+          </View>
+        </View>
+
+        {/* Visraam legend */}
+        {showGurmukhi && (
+          <View style={styles.legendRow} accessible accessibilityLabel="Pause legend">
+            <LegendDot color={VISRAAM_COLORS.y} label="Gentle Pause" />
+            <LegendDot color={VISRAAM_COLORS.v} label="Short Pause" />
+          </View>
+        )}
+      </View>
     );
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paathName, verses.length, fontSize, showGurmukhi, showHindi, showEnglish]);
 
   if (loading) {
     return (
@@ -281,94 +342,28 @@ export default function PaathDetail() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: 40 }]}
+      <FlatList
+        data={displayVerses}
+        keyExtractor={(_, i) => String(i)}
+        renderItem={renderItem}
+        ItemSeparatorComponent={Separator}
+        ListHeaderComponent={ListHeader}
+        ListEmptyComponent={
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>
+              {error ?? `No content found for ${paathName}.`}
+            </Text>
+          </View>
+        }
+        ListFooterComponent={<View style={{ height: 40 }} />}
+        extraData={extraData}
+        initialNumToRender={20}
+        windowSize={15}
+        removeClippedSubviews
         showsVerticalScrollIndicator
         scrollIndicatorInsets={{ right: 1 }}
-      >
-        {/* Header */}
-        {(() => {
-          const parts = paathName.split(' | ');
-          const gurmukhiTitle = parts[0] || paathName;
-          const englishTitle  = parts[1] || '';
-          return (
-            <View style={styles.headerCard}>
-              <Text style={styles.titleGurmukhi}>{gurmukhiTitle}</Text>
-              {!!englishTitle && <Text style={styles.titleEnglish}>{englishTitle}</Text>}
-              <View style={styles.headerDivider} />
-              <Text style={styles.headerStats}>
-                {verseCount > 0 ? `${verseCount} VERSES` : 'NO VERSES AVAILABLE'}
-              </Text>
-            </View>
-          );
-        })()}
-
-        {/* Toolbar */}
-        <View style={styles.toolbar} accessibilityRole="toolbar" accessible>
-          <View style={styles.ttLogo}><Text style={styles.ttSmall}>T</Text><Text style={styles.ttLarge}>T</Text></View>
-          <View style={styles.toolbarBtns}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Decrease text size" onPress={decreaseFont} style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]} hitSlop={8}>
-              <Text style={styles.toolbarBtnText} allowFontScaling={false}>−</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Increase text size" onPress={increaseFont} style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]} hitSlop={8}>
-              <Text style={styles.toolbarBtnText} allowFontScaling={false}>+</Text>
-            </Pressable>
-          </View>
-          <View style={styles.toggleGroup} accessibilityRole="tablist">
-            <ToggleChip label="Gurmukhi" active={showGurmukhi} onPress={() => setShowGurmukhi(v => !v)} />
-            <ToggleChip label="Hindi" active={showHindi} onPress={() => setShowHindi(v => !v)} />
-            <ToggleChip label="English" active={showEnglish} onPress={() => setShowEnglish(v => !v)} />
-          </View>
-        </View>
-
-        {/* Legend */}
-        {showGurmukhi && (
-          <View style={styles.legendRow} accessible accessibilityLabel="Pause legend">
-            <LegendDot color={VISRAAM_COLORS.y} label="Gentle Pause" />
-            <LegendDot color={VISRAAM_COLORS.v} label="Short Pause" />
-          </View>
-        )}
-
-        {error ? (
-          <View style={styles.emptyCard}><Text style={styles.emptyText}>{error}</Text></View>
-        ) : verseCount > 0 ? (
-          verses.map((v, idx) => {
-            const gurmukhi = v.verse?.verse?.unicode || v.verse?.verse?.gurmukhi || '';
-            const transliteration = v.verse?.transliteration?.hindi || '';
-            const translation =
-              v.verse?.translation?.en?.ssk ||
-              v.verse?.translation?.en?.ms ||
-              v.verse?.translation?.en?.bdb || '';
-
-            const visraamMarks = pickVisraam(v.verse?.visraam);
-            const willRender =
-              (showGurmukhi && !!gurmukhi) || (showHindi && !!transliteration) || (showEnglish && !!translation);
-            if (!willRender) return null;
-
-            return (
-              <React.Fragment key={idx}>
-                <View style={styles.verseBlock}>
-                  {showGurmukhi && !!gurmukhi && (<GurmukhiWithVisraam text={gurmukhi} marks={visraamMarks} fs={fontSize} />)}
-                  {showHindi && !!transliteration && (
-                    <Text style={[styles.transliteration, (()=>{ const fs=Math.max(MIN_SIZE, fontSize-4); return { fontSize: fs, lineHeight: Math.ceil(fs*1.35) };})()]} maxFontSizeMultiplier={2.0}>
-                      {transliteration}
-                    </Text>
-                  )}
-                  {showEnglish && !!translation && (
-                    <Text style={[styles.translation, (()=>{ const fs=Math.max(MIN_SIZE, fontSize-8); return { fontSize: fs, lineHeight: Math.ceil(fs*1.35) };})()]} maxFontSizeMultiplier={2.0}>
-                      {translation}
-                    </Text>
-                  )}
-                </View>
-                {idx < verseCount - 1 && <View accessible style={styles.divider} />}
-              </React.Fragment>
-            );
-          })
-        ) : (
-          <View style={styles.emptyCard}><Text style={styles.emptyText}>No content found for {paathName}.</Text></View>
-        )}
-      </ScrollView>
+        contentContainerStyle={styles.content}
+      />
     </SafeAreaView>
   );
 }
@@ -413,10 +408,9 @@ const TEXT       = INK;
 const SUBTLE     = MUTED;
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: WASH },
-  scroll: { flex: 1 },
-  content: { paddingBottom: 24 },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24, backgroundColor: WASH },
+  screen:      { flex: 1, backgroundColor: WASH },
+  content:     { paddingBottom: 24 },
+  loader:      { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24, backgroundColor: WASH },
   loadingText: { marginTop: 10, fontSize: 15, color: PRIMARY, fontFamily: 'Inter-SemiBold' },
   headerCard: {
     backgroundColor: CARD_BG, borderRadius: 16, marginHorizontal: 16, marginTop: 16, marginBottom: 8,
@@ -424,47 +418,41 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: IVORY_DEEP,
   },
   titleGurmukhi: { fontFamily: 'NotoSansGurmukhi', fontSize: 26, color: SAFFRON, textAlign: 'center', lineHeight: 38 },
-  titleEnglish: { fontFamily: 'Fraunces-LightItalic', fontSize: 15, color: MUTED, textAlign: 'center', marginTop: 4 },
+  titleEnglish:  { fontFamily: 'Fraunces-LightItalic', fontSize: 15, color: MUTED, textAlign: 'center', marginTop: 4 },
   headerDivider: { width: '50%', height: 1, backgroundColor: IVORY_DEEP, marginVertical: 12 },
-  headerStats: { fontFamily: 'Inter-SemiBold', fontSize: 10, color: MUTED, letterSpacing: 1.4 },
-  title: { fontSize: 24, fontFamily: 'NotoSansGurmukhi', color: PRIMARY, textAlign: 'center', marginTop: 25 },
-  subtitle: { fontFamily: 'Fraunces-LightItalic', fontSize: 13, color: MUTED, textAlign: 'center', marginTop: 4, marginBottom: 12 },
+  headerStats:   { fontFamily: 'Inter-SemiBold', fontSize: 10, color: MUTED, letterSpacing: 1.4 },
 
   toolbar: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: CARD_BG, borderRadius: 12, borderWidth: 1, borderColor: BORDER,
     paddingVertical: 8, paddingHorizontal: 12, marginHorizontal: 16, marginBottom: 8, flexWrap: 'wrap', gap: 8,
   },
-  ttSmall: { fontSize: 14, fontFamily: 'Inter-Bold', color: TEAL, marginRight: 2 },
-  ttLarge: { fontSize: 18, fontFamily: 'Inter-Bold', color: TEAL },
-  toolbarBtns: { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 8 },
-  toolbarBtn: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: TEAL, alignItems: 'center', justifyContent: 'center', backgroundColor: CARD_BG },
+  ttSmall:         { fontSize: 14, fontFamily: 'Inter-Bold', color: TEAL, marginRight: 2 },
+  ttLarge:         { fontSize: 18, fontFamily: 'Inter-Bold', color: TEAL },
+  toolbarBtns:     { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 8 },
+  toolbarBtn:      { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: TEAL, alignItems: 'center', justifyContent: 'center', backgroundColor: CARD_BG },
   toolbarBtnPressed: { opacity: 0.7 },
-  toolbarBtnText: { fontSize: 18, fontFamily: 'Inter-Bold', color: TEAL, includeFontPadding: false, textAlignVertical: 'center' },
-  toggleGroup: { flexDirection: 'row', alignItems: 'center', gap: 6, width: '100%' },
+  toolbarBtnText:  { fontSize: 18, fontFamily: 'Inter-Bold', color: TEAL, includeFontPadding: false, textAlignVertical: 'center' },
+  toggleGroup:     { flexDirection: 'row', alignItems: 'center', gap: 6, width: '100%' },
 
-  chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },
-  chipActive: { backgroundColor: TEAL, borderColor: TEAL },
-  chipInactive: { backgroundColor: CARD_BG, borderColor: IVORY_DEEP },
-  chipText: { fontSize: 12, fontFamily: 'Inter-SemiBold' },
-  chipTextActive: { color: '#FFFFFF' },
-  chipTextInactive: { color: MUTED },
+  chip:            { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },
+  chipActive:      { backgroundColor: TEAL, borderColor: TEAL },
+  chipInactive:    { backgroundColor: CARD_BG, borderColor: IVORY_DEEP },
+  chipText:        { fontSize: 12, fontFamily: 'Inter-SemiBold' },
+  chipTextActive:  { color: '#FFFFFF' },
+  chipTextInactive:{ color: MUTED },
 
-  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 16, marginBottom: 10 },
+  legendRow:  { flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 16, marginBottom: 10 },
   legendItem: { flexDirection: 'row', alignItems: 'center' },
-  legendDot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
+  legendDot:  { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
   legendText: { fontSize: 12, color: SUBTLE, fontFamily: 'Inter-Regular' },
 
-  verseCard: {
-    backgroundColor: CARD_BG, padding: 20, borderRadius: 12, borderWidth: 1, borderColor: BORDER, marginBottom: 5, marginHorizontal: 16,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1,
-  },
   verseBlock: { paddingVertical: 14, paddingHorizontal: 16 },
-  divider: { height: Math.max(1, StyleSheet.hairlineWidth * 2), backgroundColor: BORDER, marginHorizontal: 16, marginVertical: 6, opacity: 1 },
+  divider:    { height: Math.max(1, StyleSheet.hairlineWidth * 2), backgroundColor: BORDER, marginHorizontal: 16, marginVertical: 6, opacity: 1 },
 
-  gurmukhi: { fontSize: 22, lineHeight: 32, color: TEXT, marginBottom: 6, includeFontPadding: true, fontFamily: FONTS.gurmukhi as string },
+  gurmukhi:        { fontSize: 22, lineHeight: 32, color: TEXT, marginBottom: 6, includeFontPadding: true, fontFamily: FONTS.gurmukhi as string },
   transliteration: { fontSize: 18, color: SUBTLE, marginBottom: 4, fontStyle: 'italic', fontFamily: FONTS.devanagari as string },
-  translation: { fontSize: 14, color: '#3C3F44' },
-  emptyCard: { backgroundColor: CARD_BG, borderRadius: 14, padding: 16, marginHorizontal: 16, borderWidth: 1, borderColor: BORDER, alignItems: 'center' },
-  emptyText: { color: SUBTLE, fontSize: 14, fontFamily: 'Inter-Regular', textAlign: 'center' },
-  ttLogo: { flexDirection: 'row', alignItems: 'flex-end' },
+  translation:     { fontSize: 14, color: '#3C3F44' },
+  emptyCard:       { backgroundColor: CARD_BG, borderRadius: 14, padding: 16, marginHorizontal: 16, borderWidth: 1, borderColor: BORDER, alignItems: 'center' },
+  emptyText:       { color: SUBTLE, fontSize: 14, fontFamily: 'Inter-Regular', textAlign: 'center' },
+  ttLogo:          { flexDirection: 'row', alignItems: 'flex-end' },
 });
