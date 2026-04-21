@@ -1,4 +1,4 @@
-// PaathDetail.tsx — LOCAL-ONLY (no network)
+// PaathDetail.tsx — SQLite-backed (JSON fallback on first launch)
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
@@ -14,6 +14,7 @@ import {
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { RootStackParamList } from './_layout';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getVersesByTokens, isTokenSeeded, type VerseRow } from '../lib/db';
 
 type PaathDetailRouteProp = RouteProp<RootStackParamList, 'PaathDetail'>;
 
@@ -33,37 +34,30 @@ interface VerseData {
   };
 }
 
-/* ---------- Local files ---------- */
-/* Single-token JSONs named by token, placed in ../assets/paath/<token>.json */
+/* ---------- JSON fallback (used when SQLite seeding hasn't completed yet) ---------- */
 const LOCAL_BY_TOKEN: Record<string, any> = {
-  japji: require('../assets/paath/japji.json'),
-  sukhmani: require('../assets/paath/sukhmani.json'),
-  salokm9: require('../assets/paath/salokm9.json'),
-  sohila: require('../assets/paath/sohila.json'),
-  shabadhazare: require('../assets/paath/shabadhazare.json'),
-  anand: require('../assets/paath/anand.json'),
-  chaupai: require('../assets/paath/chaupai.json'),
-  rehras: require('../assets/paath/rehras.json'),
-  baarehmaha: require('../assets/paath/baarehmaha.json'),
-  aarti: require('../assets/paath/aarti.json'),
-  sidhgosht: require('../assets/paath/sidhgosht.json'),
-  bavanakhree: require('../assets/paath/bavanakhree.json'),
-  dhakhnioankar: require('../assets/paath/dhakhnioankar.json'),
-  dukhbhanjani: require('../assets/paath/dukhbhanjani.json'),
-  asadivar: require('../assets/paath/asadivar.json'),
+  japji:            require('../assets/paath/japji.json'),
+  sukhmani:         require('../assets/paath/sukhmani.json'),
+  salokm9:          require('../assets/paath/salokm9.json'),
+  sohila:           require('../assets/paath/sohila.json'),
+  shabadhazare:     require('../assets/paath/shabadhazare.json'),
+  anand:            require('../assets/paath/anand.json'),
+  chaupai:          require('../assets/paath/chaupai.json'),
+  rehras:           require('../assets/paath/rehras.json'),
+  baarehmaha:       require('../assets/paath/baarehmaha.json'),
+  aarti:            require('../assets/paath/aarti.json'),
+  sidhgosht:        require('../assets/paath/sidhgosht.json'),
+  bavanakhree:      require('../assets/paath/bavanakhree.json'),
+  dhakhnioankar:    require('../assets/paath/dhakhnioankar.json'),
+  dukhbhanjani:     require('../assets/paath/dukhbhanjani.json'),
+  asadivar:         require('../assets/paath/asadivar.json'),
+  vaarkabirjee:     require('../assets/paath/vaarkabirjee.json'),
+  sahaskriti_shlok: require('../assets/paath/sahaskriti_shlok.json'),
+  savaiye:          require('../assets/paath/savaiye.json'),
+  bhagatbani:       require('../assets/paath/bhagat_bani_-_shlok_kabir_ji_ke.json'),
 };
 
-
-const bhagatBaniTokens = [
-  'salokkabir',
-  'salokfareed',
-  'baavanakhrikabirjee',
-  'tilang',
-  'toddee',
-  'sriraag',
-];
-
-// Cache (still fine for quick re-opens)
+/* ---------- AsyncStorage cache (quick re-open) ---------- */
 const CACHE_KEY = 'paath_detail_cache_v1';
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
@@ -79,7 +73,7 @@ async function loadCache(): Promise<CacheEntry[]> {
 }
 async function saveCache(entries: CacheEntry[]): Promise<void> {
   try {
-    const sorted = [...entries].sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,2);
+    const sorted = [...entries].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 2);
     await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(sorted));
   } catch {}
 }
@@ -90,82 +84,89 @@ function isFresh(entry: CacheEntry) {
   return Date.now() - entry.updatedAt < CACHE_TTL_MS;
 }
 
-const svaiyes = ['sirimukhbaakm1a','sirimukhbaakm1b','svaiyem1','svaiyem2','svaiyem3','svaiyem4','svaiyem5'];
-
-/* Display name -> token(s) */
+/* ---------- Display name -> SQLite token(s) ---------- */
 const paathToToken: Record<string, string | string[]> = {
-  'ਜਪੁਜੀ ਸਾਹਿਬ | Japji Sahib': 'japji',
-  'ਸੁਖਮਨੀ ਸਾਹਿਬ | Sukhmani Sahib': 'sukhmani',
-  'ਸਲੋਕ ਮਹਲਾ ੯ | Shlok Mahala 9': 'salokm9',
-  'ਕੀਰਤਨ ਸੋਹਿਲਾ | Kirtan Sohila': 'sohila',
-  'ਸ਼ਬਦ ਹਜ਼ਾਰੇ | Shabad Hazare': 'shabadhazare',
-  'ਆਨੰਦ ਸਾਹਿਬ | Anand Sahib': 'anand',
-  'ਚੌਪਈ ਸਾਹਿਬ | Chaupai Sahib': 'chaupai',
-  'ਰਹਿਰਾਸ ਸਾਹਿਬ | Rehraas Sahib': 'rehras',
-  'ਬਾਰਹ ਮਾਹਾ ਮਾਂਝ | Barah Maha Manjh': 'baarehmaha',
-  'ਆਰਤੀ | Aarti': 'aarti',
-  'ਸਿਧ ਗੋਸਟਿ | Sidh Gosht': 'sidhgosht',
-  'ਬਾਵਨ ਅਖਰੀ | Bavan Akhri': 'bavanakhree',
-  'ਦਖਣੀ ਓਅੰਕਾਰੁ | Dakhni Oankar': 'dhakhnioankar',
-  'ਦੁਖ ਭੰਜਨੀ ਸਾਹਿਬ | Dukh Banjani Sahib': 'dukhbhanjani',
-  'ਆਸਾ ਦੀ ਵਾਰ | Asa Di Vaar': 'asadivar',
-  'Savaiye': svaiyes,
-  'Bhagat Bani - Shlok Kabir Ji ke': bhagatBaniTokens,
-  'Bai Vaaran': 'vaarkabirjee',
-  'Sahaskriti Shlok': 'sahas_kriti', // will use combined file if present
+  '\u0A1C\u0A2A\u0A41\u0A1C\u0A40 \u0A38\u0A3E\u0A39\u0A3F\u0A2C | Japji Sahib':             'japji',
+  '\u0A38\u0A41\u0A16\u0A2E\u0A28\u0A40 \u0A38\u0A3E\u0A39\u0A3F\u0A2C | Sukhmani Sahib':      'sukhmani',
+  '\u0A38\u0A32\u0A4B\u0A15 \u0A2E\u0A39\u0A32\u0A3E \u0A69 | Shlok Mahala 9':               'salokm9',
+  '\u0A15\u0A40\u0A30\u0A24\u0A28 \u0A38\u0A4B\u0A39\u0A3F\u0A32\u0A3E | Kirtan Sohila':      'sohila',
+  '\u0A38\u0A3C\u0A2C\u0A26 \u0A39\u0A1C\u0A3C\u0A3E\u0A30\u0A47 | Shabad Hazare':            'shabadhazare',
+  '\u0A06\u0A28\u0A70\u0A26 \u0A38\u0A3E\u0A39\u0A3F\u0A2C | Anand Sahib':                    'anand',
+  '\u0A1A\u0A4C\u0A2A\u0A08 \u0A38\u0A3E\u0A39\u0A3F\u0A2C | Chaupai Sahib':                  'chaupai',
+  '\u0A30\u0A39\u0A3F\u0A30\u0A3E\u0A38 \u0A38\u0A3E\u0A39\u0A3F\u0A2C | Rehraas Sahib':      'rehras',
+  '\u0A2C\u0A3E\u0A30\u0A39 \u0A2E\u0A3E\u0A39\u0A3E \u0A2E\u0A3E\u0A02\u0A1D | Barah Maha Manjh': 'baarehmaha',
+  '\u0A06\u0A30\u0A24\u0A40 | Aarti':                                                           'aarti',
+  '\u0A38\u0A3F\u0A27 \u0A17\u0A4B\u0A38\u0A1F\u0A3F | Sidh Gosht':                           'sidhgosht',
+  '\u0A2C\u0A3E\u0A35\u0A28 \u0A05\u0A16\u0A30\u0A40 | Bavan Akhri':                          'bavanakhree',
+  '\u0A26\u0A16\u0A23\u0A40 \u0A13\u0A05\u0A70\u0A15\u0A3E\u0A30\u0A41 | Dakhni Oankar':      'dhakhnioankar',
+  '\u0A26\u0A41\u0A16 \u0A2D\u0A70\u0A1C\u0A28\u0A40 \u0A38\u0A3E\u0A39\u0A3F\u0A2C | Dukh Banjani Sahib': 'dukhbhanjani',
+  '\u0A06\u0A38\u0A3E \u0A26\u0A40 \u0A35\u0A3E\u0A30 | Asa Di Vaar':                         'asadivar',
+  'Savaiye':                                                                                    'savaiye',
+  'Bhagat Bani - Shlok Kabir Ji ke':                                                           'bhagatbani',
+  'Bai Vaaran':                                                                                 'vaarkabirjee',
+  'Sahaskriti Shlok':                                                                          'sahaskriti_shlok',
 };
 
-/* ---------- Local loader helpers ---------- */
-function loadLocalPayload(mod: any): VerseData[] | null {
-  const verses = Array.isArray(mod?.verses) ? mod.verses : mod?.default?.verses;
-  return Array.isArray(verses) ? verses : null;
+/* ---------- Verse loading ---------- */
+
+function rowToVerseData(row: VerseRow): VerseData {
+  return {
+    verse: {
+      verse: {
+        unicode:  row.gurmukhi_unicode ?? undefined,
+        gurmukhi: row.gurmukhi_raw    ?? undefined,
+      },
+      transliteration: { hindi: row.transliteration_hindi ?? undefined },
+      translation: {
+        en: {
+          bdb: row.translation_en_bdb ?? undefined,
+          ms:  row.translation_en_ms  ?? undefined,
+          ssk: row.translation_en_ssk ?? undefined,
+        },
+      },
+      visraam: row.visraam_json ? JSON.parse(row.visraam_json) : undefined,
+    },
+  };
 }
 
-function loadByToken(token: string): VerseData[] | null {
-  try {
-    const mod = LOCAL_BY_TOKEN[token];
-    if (!mod) return null;
-    return loadLocalPayload(mod);
-  } catch { return null; }
-}
-async function getLocalVerses(paathName: string): Promise<VerseData[]> {
-  // Prefer a single combined file if it exists for multi-token sets & Sahaskriti
-
-
-  const tokens = paathToToken[paathName];
-  if (!tokens) throw new Error(`No token mapping for ${paathName}`);
-
-  const list = Array.isArray(tokens) ? tokens : [tokens];
-
-  // Single-token
-  if (list.length === 1 && list[0] !== 'sahas_kriti') {
-    const one = loadByToken(list[0] as string);
-    if (one) return one;
-    throw new Error(`Local file missing for token: ${list[0]}`);
-  }
-
-  // Multi-token fallback: concat per-token files if present
+function jsonFallback(tokens: string[]): VerseData[] {
   const out: VerseData[] = [];
-  for (const t of list) {
-    if (t === 'sahas_kriti') continue; // expect combined file for this one
-    const v = loadByToken(t as string);
-    if (v) out.push(...v);
+  for (const t of tokens) {
+    const mod = LOCAL_BY_TOKEN[t];
+    if (!mod) continue;
+    const verses = Array.isArray(mod?.verses) ? mod.verses : mod?.default?.verses;
+    if (Array.isArray(verses)) out.push(...verses);
   }
-  if (out.length) return out;
+  return out;
+}
 
-  // Sahaskriti fallback message
-  if (list.includes('sahas_kriti')) {
-    throw new Error('Local file missing for Sahaskriti (expected assets/paath/sahaskriti_shlok.json)');
+/**
+ * Load verses for a paath name.
+ * Reads from SQLite when seeded; falls back to bundled JSON on first launch.
+ */
+async function getVerses(paathName: string): Promise<VerseData[]> {
+  const mapping = paathToToken[paathName];
+  if (!mapping) throw new Error(`No token mapping for "${paathName}"`);
+
+  const tokens = Array.isArray(mapping) ? mapping : [mapping];
+
+  const seededFlags = await Promise.all(tokens.map(isTokenSeeded));
+  if (seededFlags.every(Boolean)) {
+    const rows = await getVersesByTokens(tokens);
+    return rows.map(rowToVerseData);
   }
-  throw new Error(`No local files found for ${paathName}`);
+
+  // First-launch fallback: read from bundled JSON
+  const fallback = jsonFallback(tokens);
+  if (fallback.length) return fallback;
+
+  throw new Error(`No verses found for "${paathName}"`);
 }
 
 /* ---------- Fonts ---------- */
 const FONTS = {
   gurmukhi: Platform.select({ ios: 'Gurmukhi MN', android: 'NotoSansGurmukhi-Regular' }),
   devanagari: Platform.select({ ios: 'Times New Roman', android: 'NotoSansDevanagari-Regular' }),
-  latinUI: Platform.select({ ios: undefined, android: undefined }),
-  latinUIBold: Platform.select({ ios: undefined, android: undefined }),
 };
 
 export default function PaathDetail() {
@@ -176,7 +177,6 @@ export default function PaathDetail() {
   const [verses, setVerses] = useState<VerseData[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Font size controls
   const [fontSize, setFontSize] = useState(22);
   const MIN_SIZE = 12, MAX_SIZE = 40;
   const [showGurmukhi, setShowGurmukhi] = useState(true);
@@ -195,7 +195,7 @@ export default function PaathDetail() {
       setLoading(true);
       setError(null);
 
-      // 1) cache
+      // 1) AsyncStorage cache for instant re-opens
       const cache = await loadCache();
       const cached = getFromCache(cache, paathName);
       if (cached && isFresh(cached)) {
@@ -203,20 +203,21 @@ export default function PaathDetail() {
         return;
       }
 
-      // 2) local assets
+      // 2) SQLite (or JSON fallback on first launch)
       try {
-        const local = await getLocalVerses(paathName);
+        const loaded = await getVerses(paathName);
         if (!cancelled) {
-          setVerses(local);
+          setVerses(loaded);
           setLoading(false);
         }
-
-        const updated: CacheEntry = { name: paathName, verses: local, updatedAt: Date.now() };
-        const next = cached ? cache.map(e => e.name === paathName ? updated : e) : [updated, ...cache];
+        const updated: CacheEntry = { name: paathName, verses: loaded, updatedAt: Date.now() };
+        const next = cached
+          ? cache.map(e => e.name === paathName ? updated : e)
+          : [updated, ...cache];
         await saveCache(next);
       } catch (e: any) {
         if (!cancelled) {
-          setError(e?.message || 'Could not load local file for this paath.');
+          setError(e?.message || 'Could not load this paath.');
           setVerses([]);
           setLoading(false);
         }
@@ -372,7 +373,6 @@ export default function PaathDetail() {
   );
 }
 
-/** Small legend dot component */
 function LegendDot({ color, label }: { color: string; label: string }) {
   return (
     <View style={styles.legendItem}>
@@ -382,7 +382,6 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   );
 }
 
-/** Small toggle chip component */
 function ToggleChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
     <Pressable
@@ -462,7 +461,6 @@ const styles = StyleSheet.create({
   verseBlock: { paddingVertical: 14, paddingHorizontal: 16 },
   divider: { height: Math.max(1, StyleSheet.hairlineWidth * 2), backgroundColor: BORDER, marginHorizontal: 16, marginVertical: 6, opacity: 1 },
 
-  // Script styles
   gurmukhi: { fontSize: 22, lineHeight: 32, color: TEXT, marginBottom: 6, includeFontPadding: true, fontFamily: FONTS.gurmukhi as string },
   transliteration: { fontSize: 18, color: SUBTLE, marginBottom: 4, fontStyle: 'italic', fontFamily: FONTS.devanagari as string },
   translation: { fontSize: 14, color: '#3C3F44' },

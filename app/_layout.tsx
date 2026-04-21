@@ -9,6 +9,7 @@ import { ThemeContext } from './ThemeContext';
 
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
+import { seedAllPaaths } from '../lib/seedDatabase';
 
 import MainScreen from './index';
 import SecondScreen from './SecondScreen';
@@ -128,6 +129,8 @@ export default function Layout() {
       } finally {
         setReady(true);
         await SplashScreen.hideAsync().catch(() => {});
+        // Seed paath data into SQLite in the background after the UI is visible
+        seedAllPaaths().catch(e => console.warn('[seedAllPaaths]', e));
       }
     })();
   }, []);
