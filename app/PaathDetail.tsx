@@ -25,6 +25,7 @@ type Visraam = {
 };
 
 interface VerseData {
+  header?: number;
   verse?: {
     verse?: { unicode?: string; gurmukhi?: string };
     transliteration?: { hindi?: string };
@@ -286,8 +287,22 @@ export default function PaathDetail() {
         showsVerticalScrollIndicator
         scrollIndicatorInsets={{ right: 1 }}
       >
-        <Text style={styles.title}>{paathName}</Text>
-        <Text style={styles.subtitle}>{verseCount > 0 ? `${verseCount} verses` : 'No verses available'}</Text>
+        {/* Header */}
+        {(() => {
+          const parts = paathName.split(' | ');
+          const gurmukhiTitle = parts[0] || paathName;
+          const englishTitle  = parts[1] || '';
+          return (
+            <View style={styles.headerCard}>
+              <Text style={styles.titleGurmukhi}>{gurmukhiTitle}</Text>
+              {!!englishTitle && <Text style={styles.titleEnglish}>{englishTitle}</Text>}
+              <View style={styles.headerDivider} />
+              <Text style={styles.headerStats}>
+                {verseCount > 0 ? `${verseCount} VERSES` : 'NO VERSES AVAILABLE'}
+              </Text>
+            </View>
+          );
+        })()}
 
         {/* Toolbar */}
         <View style={styles.toolbar} accessibilityRole="toolbar" accessible>
@@ -318,38 +333,57 @@ export default function PaathDetail() {
         {error ? (
           <View style={styles.emptyCard}><Text style={styles.emptyText}>{error}</Text></View>
         ) : verseCount > 0 ? (
-          verses.map((v, idx) => {
-            const gurmukhi = v.verse?.verse?.unicode || v.verse?.verse?.gurmukhi || '';
-            const transliteration = v.verse?.transliteration?.hindi || '';
-            const translation =
-              v.verse?.translation?.en?.ssk ||
-              v.verse?.translation?.en?.ms ||
-              v.verse?.translation?.en?.bdb || '';
+          (() => {
+            let aatpadiCount = 0;
+            return verses.map((v, idx) => {
+              const gurmukhi = v.verse?.verse?.unicode || v.verse?.verse?.gurmukhi || '';
+              const transliteration = v.verse?.transliteration?.hindi || '';
+              const translation =
+                v.verse?.translation?.en?.ssk ||
+                v.verse?.translation?.en?.ms ||
+                v.verse?.translation?.en?.bdb || '';
 
-            const visraamMarks = pickVisraam(v.verse?.visraam);
-            const willRender =
-              (showGurmukhi && !!gurmukhi) || (showHindi && !!transliteration) || (showEnglish && !!translation);
-            if (!willRender) return null;
+              // Ashtpadi section marker
+              const isAshtpadi = v.header === 2 && gurmukhi.includes('ਅਸਟਪਦੀ');
+              if (isAshtpadi) aatpadiCount++;
+              const aatpadiNum = isAshtpadi ? aatpadiCount : 0;
 
-            return (
-              <React.Fragment key={idx}>
-                <View style={styles.verseBlock}>
-                  {showGurmukhi && !!gurmukhi && (<GurmukhiWithVisraam text={gurmukhi} marks={visraamMarks} fs={fontSize} />)}
-                  {showHindi && !!transliteration && (
-                    <Text style={[styles.transliteration, (()=>{ const fs=Math.max(MIN_SIZE, fontSize-4); return { fontSize: fs, lineHeight: Math.ceil(fs*1.35) };})()]} maxFontSizeMultiplier={2.0}>
-                      {transliteration}
-                    </Text>
-                  )}
-                  {showEnglish && !!translation && (
-                    <Text style={[styles.translation, (()=>{ const fs=Math.max(MIN_SIZE, fontSize-8); return { fontSize: fs, lineHeight: Math.ceil(fs*1.35) };})()]} maxFontSizeMultiplier={2.0}>
-                      {translation}
-                    </Text>
-                  )}
-                </View>
-                {idx < verseCount - 1 && <View accessible style={styles.divider} />}
-              </React.Fragment>
-            );
-          })
+              const visraamMarks = pickVisraam(v.verse?.visraam);
+              const willRender =
+                isAshtpadi ||
+                (showGurmukhi && !!gurmukhi) || (showHindi && !!transliteration) || (showEnglish && !!translation);
+              if (!willRender) return null;
+
+              if (isAshtpadi) {
+                return (
+                  <View key={idx} style={styles.ashtpadiBanner}>
+                    <View style={styles.ashtpadiLine} />
+                    <Text style={styles.ashtpadiLabel}>ਅਸਟਪਦੀ {aatpadiNum}</Text>
+                    <View style={styles.ashtpadiLine} />
+                  </View>
+                );
+              }
+
+              return (
+                <React.Fragment key={idx}>
+                  <View style={styles.verseBlock}>
+                    {showGurmukhi && !!gurmukhi && (<GurmukhiWithVisraam text={gurmukhi} marks={visraamMarks} fs={fontSize} />)}
+                    {showHindi && !!transliteration && (
+                      <Text style={[styles.transliteration, (()=>{ const fs=Math.max(MIN_SIZE, fontSize-4); return { fontSize: fs, lineHeight: Math.ceil(fs*1.35) };})()]} maxFontSizeMultiplier={2.0}>
+                        {transliteration}
+                      </Text>
+                    )}
+                    {showEnglish && !!translation && (
+                      <Text style={[styles.translation, (()=>{ const fs=Math.max(MIN_SIZE, fontSize-8); return { fontSize: fs, lineHeight: Math.ceil(fs*1.35) };})()]} maxFontSizeMultiplier={2.0}>
+                        {translation}
+                      </Text>
+                    )}
+                  </View>
+                  {idx < verseCount - 1 && <View accessible style={styles.divider} />}
+                </React.Fragment>
+              );
+            });
+          })()
         ) : (
           <View style={styles.emptyCard}><Text style={styles.emptyText}>No content found for {paathName}.</Text></View>
         )}
@@ -385,58 +419,84 @@ function ToggleChip({ label, active, onPress }: { label: string; active: boolean
 }
 
 /* ===== Theme ===== */
-const PRIMARY = '#8076BE';
-const BORDER = 'rgba(128, 118, 190, 0.26)';
-const WASH = '#F5F3FF';
-const CARD_BG = '#FFFFFF';
-const TEXT = '#1F2328';
-const SUBTLE = '#6B7280';
+const SAFFRON    = '#E06B1F';
+const TEAL       = '#13302E';
+const IVORY      = '#F8F1E6';
+const PARCHMENT  = '#FBF6EE';
+const IVORY_DEEP = '#F0E6D4';
+const INK        = '#1A1612';
+const MUTED      = '#6B6054';
+const PRIMARY    = SAFFRON;
+const BORDER     = IVORY_DEEP;
+const WASH       = IVORY;
+const CARD_BG    = PARCHMENT;
+const TEXT       = INK;
+const SUBTLE     = MUTED;
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: WASH, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 16 },
+  screen: { flex: 1, backgroundColor: WASH },
   scroll: { flex: 1 },
   content: { paddingBottom: 24 },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24, backgroundColor: WASH },
-  loadingText: { marginTop: 10, fontSize: 15, color: PRIMARY, fontWeight: '700' },
-  title: { fontSize: 24, fontWeight: '700', color: PRIMARY, textAlign: 'center', marginTop: 25 },
-  subtitle: { fontSize: 13, color: PRIMARY, textAlign: 'center', marginTop: 4, marginBottom: 12, fontWeight: '700', opacity: 0.85 },
+  loadingText: { marginTop: 10, fontSize: 15, color: PRIMARY, fontFamily: 'Inter-SemiBold' },
+  headerCard: {
+    backgroundColor: CARD_BG, borderRadius: 16, marginHorizontal: 16, marginTop: 16, marginBottom: 8,
+    paddingVertical: 20, paddingHorizontal: 16, alignItems: 'center',
+    borderWidth: 1, borderColor: IVORY_DEEP,
+  },
+  titleGurmukhi: { fontFamily: 'NotoSansGurmukhi', fontSize: 26, color: SAFFRON, textAlign: 'center', lineHeight: 38 },
+  titleEnglish: { fontFamily: 'Fraunces-LightItalic', fontSize: 15, color: MUTED, textAlign: 'center', marginTop: 4 },
+  headerDivider: { width: '50%', height: 1, backgroundColor: IVORY_DEEP, marginVertical: 12 },
+  headerStats: { fontFamily: 'Inter-SemiBold', fontSize: 10, color: MUTED, letterSpacing: 1.4 },
+  title: { fontSize: 24, fontFamily: 'NotoSansGurmukhi', color: PRIMARY, textAlign: 'center', marginTop: 25 },
+  subtitle: { fontFamily: 'Fraunces-LightItalic', fontSize: 13, color: MUTED, textAlign: 'center', marginTop: 4, marginBottom: 12 },
 
   toolbar: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: BORDER,
-    paddingVertical: 8, paddingHorizontal: 12, marginHorizontal: 15, marginBottom: 8, flexWrap: 'wrap', gap: 8,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: CARD_BG, borderRadius: 12, borderWidth: 1, borderColor: BORDER,
+    paddingVertical: 8, paddingHorizontal: 12, marginHorizontal: 16, marginBottom: 8, flexWrap: 'wrap', gap: 8,
   },
-  ttSmall: { fontSize: 14, fontWeight: '800', color: PRIMARY, marginRight: 2 },
-  ttLarge: { fontSize: 18, fontWeight: '800', color: PRIMARY },
+  ttSmall: { fontSize: 14, fontFamily: 'Inter-Bold', color: TEAL, marginRight: 2 },
+  ttLarge: { fontSize: 18, fontFamily: 'Inter-Bold', color: TEAL },
   toolbarBtns: { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 8 },
-  toolbarBtn: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: PRIMARY, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF' },
+  toolbarBtn: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: TEAL, alignItems: 'center', justifyContent: 'center', backgroundColor: CARD_BG },
   toolbarBtnPressed: { opacity: 0.7 },
-  toolbarBtnText: { fontSize: 18, fontWeight: '800', color: PRIMARY, includeFontPadding: false, textAlignVertical: 'center' },
+  toolbarBtnText: { fontSize: 18, fontFamily: 'Inter-Bold', color: TEAL, includeFontPadding: false, textAlignVertical: 'center' },
   toggleGroup: { flexDirection: 'row', alignItems: 'center', gap: 6, width: '100%' },
 
   chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },
-  chipActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
-  chipInactive: { backgroundColor: '#FFFFFF', borderColor: PRIMARY },
-  chipText: { fontSize: 12, fontWeight: '700' },
+  chipActive: { backgroundColor: TEAL, borderColor: TEAL },
+  chipInactive: { backgroundColor: CARD_BG, borderColor: IVORY_DEEP },
+  chipText: { fontSize: 12, fontFamily: 'Inter-SemiBold' },
   chipTextActive: { color: '#FFFFFF' },
-  chipTextInactive: { color: PRIMARY },
+  chipTextInactive: { color: MUTED },
 
-  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 15, marginBottom: 10 },
+  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 16, marginBottom: 10 },
   legendItem: { flexDirection: 'row', alignItems: 'center' },
   legendDot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
-  legendText: { fontSize: 12, color: SUBTLE },
+  legendText: { fontSize: 12, color: SUBTLE, fontFamily: 'Inter-Regular' },
 
   verseCard: {
-    backgroundColor: '#f7f6fcff', padding: 20, borderRadius: 12, borderWidth: 1, borderColor: BORDER, marginBottom: 5, marginHorizontal: 15,
+    backgroundColor: CARD_BG, padding: 20, borderRadius: 12, borderWidth: 1, borderColor: BORDER, marginBottom: 5, marginHorizontal: 16,
     shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1,
   },
-  verseBlock: { paddingVertical: 14, paddingHorizontal: 15 },
-  divider: { height: Math.max(1, StyleSheet.hairlineWidth * 2), backgroundColor: BORDER, marginHorizontal: 15, marginVertical: 6, opacity: 1 },
+  verseBlock: { paddingVertical: 14, paddingHorizontal: 16 },
+  divider: { height: Math.max(1, StyleSheet.hairlineWidth * 2), backgroundColor: BORDER, marginHorizontal: 16, marginVertical: 6, opacity: 1 },
+
+  ashtpadiBanner: {
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: 16, marginVertical: 20,
+  },
+  ashtpadiLine: { flex: 1, height: 1, backgroundColor: BORDER },
+  ashtpadiLabel: {
+    fontFamily: 'NotoSansGurmukhi', fontSize: 15, color: TEAL,
+    fontWeight: '600', marginHorizontal: 12, letterSpacing: 0.3,
+  },
 
   // Script styles
   gurmukhi: { fontSize: 22, lineHeight: 32, color: TEXT, marginBottom: 6, includeFontPadding: true, fontFamily: FONTS.gurmukhi as string },
   transliteration: { fontSize: 18, color: SUBTLE, marginBottom: 4, fontStyle: 'italic', fontFamily: FONTS.devanagari as string },
   translation: { fontSize: 14, color: '#3C3F44' },
-  emptyCard: { backgroundColor: CARD_BG, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: BORDER, alignItems: 'center' },
-  emptyText: { color: SUBTLE, fontSize: 14, textAlign: 'center' },
+  emptyCard: { backgroundColor: CARD_BG, borderRadius: 14, padding: 16, marginHorizontal: 16, borderWidth: 1, borderColor: BORDER, alignItems: 'center' },
+  emptyText: { color: SUBTLE, fontSize: 14, fontFamily: 'Inter-Regular', textAlign: 'center' },
   ttLogo: { flexDirection: 'row', alignItems: 'flex-end' },
 });

@@ -23,6 +23,7 @@ import * as Notifications from 'expo-notifications';
 import { Linking } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme } from './ThemeContext';
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 
 // ── Brand tokens ──────────────────────────────────────────────────────────────
@@ -193,24 +194,31 @@ function MeditationButton({ title, subtitle, source, gradientColors, C, theme }:
           style={[theme.modalOverlay, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}
         >
           <Pressable onPress={() => {}} style={theme.modalContent}>
+            <View style={theme.modalHandle} />
+            <Image source={require('../assets/diya-logo.png')} style={theme.modalDiya} />
             <Text style={theme.modalTitle}>{title}</Text>
             <Text style={theme.modalSubtitleText}>{subtitle}</Text>
 
-            <Slider
-              style={{ width: '90%', marginTop: 16 }}
-              minimumValue={0} maximumValue={duration} value={position}
-              onSlidingComplete={(v) => sound?.setPositionAsync(v)}
-              minimumTrackTintColor={C.saffron} maximumTrackTintColor={C.ivoryDeep}
-            />
+            <View style={theme.sliderRow}>
+              <Slider
+                style={{ flex: 1 }}
+                minimumValue={0} maximumValue={duration} value={position}
+                onSlidingComplete={(v) => sound?.setPositionAsync(v)}
+                minimumTrackTintColor={C.saffron} maximumTrackTintColor={C.ivoryDeep}
+                thumbTintColor={C.saffron}
+              />
+            </View>
             <Text style={theme.timeText}>{formatTime(position)} / {formatTime(duration)}</Text>
 
             <View style={theme.audioControls}>
-              <TouchableOpacity style={theme.audioButton}
-                onPress={() => isPlaying ? sound?.pauseAsync() : sound?.playAsync()}>
-                <Text style={theme.audioButtonText}>{isPlaying ? '⏸ Pause' : '▶ Play'}</Text>
+              <TouchableOpacity
+                style={theme.audioButtonPrimary}
+                onPress={() => isPlaying ? sound?.pauseAsync() : sound?.playAsync()}
+              >
+                <Text style={theme.audioButtonPrimaryText}>{isPlaying ? '⏸  Pause' : '▶  Play'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[theme.audioButton, { backgroundColor: C.ivoryDeep }]} onPress={handleStop}>
-                <Text style={[theme.audioButtonText, { color: C.saffron }]}>✕ Stop</Text>
+              <TouchableOpacity style={theme.audioButtonGhost} onPress={handleStop}>
+                <Text style={theme.audioButtonGhostText}>✕  Stop</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -223,7 +231,7 @@ function MeditationButton({ title, subtitle, source, gradientColors, C, theme }:
 // ── MainScreen ────────────────────────────────────────────────────────────────
 export default function MainScreen() {
   const insets = useSafeAreaInsets();
-  const [isDark, setIsDark]                 = useState(false);
+  const { isDark, setIsDark }               = useTheme();
   const C = isDark ? DARK : LIGHT;
   const styles = useMemo(() => makeStyles(C), [isDark]);
   const [latestVideo, setLatestVideo]       = useState<any>(null);
@@ -365,7 +373,7 @@ export default function MainScreen() {
     : '';
 
   return (
-    <SafeAreaView style={[styles.safeArea, { paddingTop: insets.top }]} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
@@ -392,9 +400,8 @@ export default function MainScreen() {
           </View>
         </View>
 
-        {/* ── About Nirmal Ashram button ── */}
         <TouchableOpacity onPress={() => setNirmalVisible(true)} activeOpacity={0.7} style={styles.ashramButton}>
-          <Text style={styles.ashramButtonText}>About Nirmal Ashram Rishikesh</Text>
+          <Text style={styles.ashramButtonText}>About Nirmal Ashram Rishikesh  ›</Text>
         </TouchableOpacity>
         <Text style={styles.heroLine}>
           Begin in <Text style={styles.heroItalic}>{heroWord}</Text>
@@ -496,12 +503,15 @@ export default function MainScreen() {
 
       {/* ── Social Links Modal ── */}
       <Modal visible={socialVisible} animationType="fade" transparent>
-        <Pressable
-          onPress={() => setSocialVisible(false)}
-          style={[styles.modalOverlay, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}
-        >
-          <Pressable onPress={() => {}} style={[styles.modalContent, { alignItems: 'stretch' }]}>
-            <Text style={styles.modalTitle}>Stay Connected</Text>
+        <View style={[styles.modalOverlay, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSocialVisible(false)} />
+          <View style={[styles.modalContent, { alignItems: 'stretch' }]}>
+            <View style={styles.modalTopBar}>
+              <Text style={styles.modalTitle}>Stay Connected</Text>
+              <TouchableOpacity onPress={() => setSocialVisible(false)} style={styles.closeIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close" size={22} color={C.ink} />
+              </TouchableOpacity>
+            </View>
 
             <Text style={styles.modalSectionLabel}>WhatsApp Broadcast Channel</Text>
             <TouchableOpacity style={styles.linkRow} onPress={() => openSmartUrl('https://whatsapp.com/channel/0029VajldkL2ZjCn7NsymG2M')}>
@@ -529,20 +539,23 @@ export default function MainScreen() {
               <Ionicons name="chevron-forward" size={18} color={C.saffron} />
             </TouchableOpacity>
 
-            <Pressable style={[styles.audioButton, { marginTop: 14 }]} onPress={() => setSocialVisible(false)}>
-              <Text style={styles.audioButtonText}>Close</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* ── About Nirmal Ashram Modal ── */}
       <Modal visible={nirmalVisible} transparent animationType="slide" onRequestClose={() => setNirmalVisible(false)}>
         <View style={styles.modalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setNirmalVisible(false)} />
           <View style={[styles.modalCard, { height: CARD_HEIGHT }]}>
-            <Text style={styles.modalTitle} maxFontSizeMultiplier={2.2}>
-              About Nirmal Ashram Rishikesh
-            </Text>
+            <View style={styles.modalTopBar}>
+              <Text style={[styles.modalTitle, { flex: 1 }]} maxFontSizeMultiplier={2.2}>
+                About Nirmal Ashram Rishikesh
+              </Text>
+              <TouchableOpacity onPress={() => setNirmalVisible(false)} style={styles.closeIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close" size={22} color={C.ink} />
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.modalBodyWrap}>
               <ScrollView contentContainerStyle={styles.modalBodyContent} showsVerticalScrollIndicator>
@@ -590,9 +603,6 @@ export default function MainScreen() {
               </ScrollView>
             </View>
 
-            <Pressable style={styles.closeButton} onPress={() => setNirmalVisible(false)}>
-              <Text style={styles.closeButtonText} maxFontSizeMultiplier={1.8}>Close</Text>
-            </Pressable>
           </View>
         </View>
       </Modal>
@@ -622,16 +632,14 @@ function makeStyles(C: Colors) { return StyleSheet.create({
 
   // About button
   ashramButton: {
-    alignSelf: 'flex-start',
-    marginTop: 12, marginBottom: 6,
-    paddingVertical: 5, paddingHorizontal: 12,
-    borderRadius: 20,
-    borderWidth: 1, borderColor: C.saffron,
+    alignSelf: 'flex-start', marginTop: 12, marginBottom: 6,
+    backgroundColor: '#FFFFFF', borderRadius: 20,
+    paddingVertical: 5, paddingHorizontal: 14,
   },
   ashramButtonText: {
-    fontFamily: 'Inter-SemiBold', fontSize: 11, color: C.saffron, letterSpacing: 1,
+    fontFamily: 'Inter-Medium', fontSize: 11, color: C.muted, letterSpacing: 1.2,
   },
-  heroLine:   { fontFamily: 'Fraunces-Regular', fontSize: 34, lineHeight: 40, color: C.teal, marginBottom: 24 },
+  heroLine:   { fontFamily: 'Fraunces-Regular', fontSize: 34, lineHeight: 40, color: C.teal, marginTop: 4, marginBottom: 12 },
   heroItalic: { fontFamily: 'Fraunces-LightItalic', fontSize: 34, lineHeight: 40, color: C.saffron },
 
   // Meditation
@@ -690,9 +698,9 @@ function makeStyles(C: Colors) { return StyleSheet.create({
   kathaListenText: { fontFamily: 'Inter-SemiBold', fontSize: 13, color: C.teal },
   kathaMetadata: {
     fontFamily: 'Inter-Regular', fontSize: 12, color: C.muted,
-    textAlign: 'center', marginTop: 10, lineHeight: 17,
+    textAlign: 'center', marginTop: 10, lineHeight: 19,
   },
-  kathaVideoTitle: { fontFamily: 'Inter-Medium', fontSize: 12, color: C.ink },
+  kathaVideoTitle: { fontFamily: 'Fraunces-Regular', fontSize: 13, color: C.ink },
 
   // About row
   aboutRow: { flexDirection: 'row', alignItems: 'stretch', gap: 10, marginBottom: 24 },
@@ -739,13 +747,38 @@ function makeStyles(C: Colors) { return StyleSheet.create({
     backgroundColor: 'rgba(19,48,46,0.4)', paddingHorizontal: 16,
   },
   modalContent: {
-    backgroundColor: C.parchment, borderRadius: 20, padding: 20,
+    backgroundColor: C.parchment, borderRadius: 24, padding: 22,
     width: '88%', alignItems: 'center',
+    borderWidth: 1, borderColor: C.ivoryDeep,
   },
-  modalTitle:        { fontFamily: 'Fraunces-SemiBold', fontSize: 20, color: C.teal, marginBottom: 4 },
-  modalSubtitleText: { fontFamily: 'Inter-Regular', fontSize: 13, color: C.muted, marginBottom: 12 },
-  timeText:          { fontFamily: 'Inter-Regular', fontSize: 13, color: C.muted, marginTop: 4 },
-  audioControls:     { flexDirection: 'row', gap: 10, marginTop: 20 },
+  modalHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: C.ivoryDeep, alignSelf: 'center', marginBottom: 16,
+  },
+  modalTopBar: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    justifyContent: 'space-between', marginBottom: 16, width: '100%', gap: 8,
+  },
+  closeIcon: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: C.ivoryDeep, alignItems: 'center', justifyContent: 'center',
+  },
+  modalDiya: { width: 48, height: 48, resizeMode: 'contain', marginBottom: 8 },
+  modalTitle:        { fontFamily: 'Fraunces-SemiBold', fontSize: 22, color: C.teal, marginBottom: 2 },
+  modalSubtitleText: { fontFamily: 'Inter-Regular', fontSize: 13, color: C.muted, marginBottom: 8 },
+  sliderRow:         { width: '100%', paddingHorizontal: 4, marginTop: 12 },
+  timeText:          { fontFamily: 'Inter-Regular', fontSize: 12, color: C.muted, marginTop: 2, marginBottom: 4 },
+  audioControls:     { flexDirection: 'row', gap: 10, marginTop: 16, width: '100%' },
+  audioButtonPrimary: {
+    flex: 1, paddingVertical: 13, borderRadius: 14,
+    backgroundColor: C.saffron, alignItems: 'center',
+  },
+  audioButtonPrimaryText: { fontFamily: 'Inter-SemiBold', fontSize: 15, color: '#FFFFFF' },
+  audioButtonGhost: {
+    flex: 1, paddingVertical: 13, borderRadius: 14,
+    borderWidth: 1.5, borderColor: C.saffron, alignItems: 'center',
+  },
+  audioButtonGhostText: { fontFamily: 'Inter-SemiBold', fontSize: 15, color: C.saffron },
   audioButton:       { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 12, backgroundColor: C.ivoryDeep },
   audioButtonText:   { fontFamily: 'Inter-Medium', fontSize: 14, color: C.ink },
 
@@ -773,7 +806,8 @@ function makeStyles(C: Colors) { return StyleSheet.create({
   },
   modalCard: {
     backgroundColor: C.parchment, borderRadius: 20, padding: 18,
-    borderWidth: 1, borderColor: C.ivoryDeep, width: '92%', alignItems: 'stretch',
+    borderWidth: 1, borderColor: C.ivoryDeep, width: '92%',
+    alignItems: 'stretch', flexDirection: 'column',
   },
   modalBodyWrap:    { flex: 1, minHeight: 0 },
   modalBodyContent: { paddingBottom: 8, flexGrow: 1 },
