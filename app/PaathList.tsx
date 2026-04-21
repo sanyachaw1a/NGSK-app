@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   View,
+  TextInput,
   Modal,
   Pressable,
 } from 'react-native';
@@ -45,6 +46,7 @@ export default function PaathList() {
     'ਆਸਾ ਦੀ ਵਾਰ | Asa Di Vaar',
   ];
 
+  const [query, setQuery] = useState('');
   const [aboutVisible, setAboutVisible] = useState(false);
 
   // ⭐ Favorites state (persisted)
@@ -74,8 +76,10 @@ export default function PaathList() {
   }, [favorites]);
 
   const filtered = useMemo(() => {
-    return showOnlyFavs ? paaths.filter((p) => favorites.has(p)) : paaths;
-  }, [paaths, showOnlyFavs, favorites]);
+    const q = query.trim().toLowerCase();
+    const base = q ? paaths.filter((p) => p.toLowerCase().includes(q)) : paaths;
+    return showOnlyFavs ? base.filter((p) => favorites.has(p)) : base;
+  }, [query, paaths, showOnlyFavs, favorites]);
 
   const handlePress = (paathName: string) => {
     navigation.navigate('PaathDetail', { paathName });
@@ -95,12 +99,34 @@ export default function PaathList() {
       edges={['top', 'left', 'right']}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <Text style={styles.eyebrow}>PAATH · NITNEM · GURBANI</Text>
-        <Text style={styles.header}>Paath</Text>
-        <Text style={styles.headerGurmukhi}>ਪਾਠ</Text>
+        {/* Header row with About modal trigger */}
+        <Text style={styles.header}>Paath List</Text>
         
 
+
+        {/* Search bar */}
+        <View style={styles.searchWrap}>
+          <Text style={styles.searchIcon}>🔎</Text>
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search paath…"
+            placeholderTextColor="#7B76A8"
+            style={styles.searchInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {query.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setQuery('')}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel="Clear search"
+            >
+              <Text style={styles.clear}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {/* Filter pills: All / Favorites */}
         <View style={styles.filtersRow}>
@@ -130,24 +156,20 @@ export default function PaathList() {
         <View style={styles.list}>
           {filtered.map((paath, i) => {
             const isFav = favorites.has(paath);
-            const parts = paath.split(' | ');
-            const gurmukhiTitle = parts[0] || paath;
-            const englishTitle  = parts[1] || '';
             return (
-              <TouchableOpacity
-                key={i}
-                style={styles.row}
-                onPress={() => handlePress(paath)}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${paath}`}
-              >
-                <View style={styles.rowAccent} />
-                <View style={styles.textWrap}>
-                  <Text style={styles.titleGurmukhi}>{gurmukhiTitle}</Text>
-                  {!!englishTitle && <Text style={styles.titleEnglish}>{englishTitle}</Text>}
-                </View>
+              <View key={i} style={styles.row}>
+                <TouchableOpacity
+                  style={styles.textWrap}
+                  onPress={() => handlePress(paath)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${paath}`}
+                >
+                  <Text style={styles.title}>{paath}</Text>
+                  <Text style={styles.hint}>Tap to read</Text>
+                </TouchableOpacity>
 
+                {/* Favorite star */}
                 <TouchableOpacity
                   onPress={() => toggleFavorite(paath)}
                   accessibilityRole="button"
@@ -157,13 +179,13 @@ export default function PaathList() {
                 >
                   <Ionicons
                     name={isFav ? 'star' : 'star-outline'}
-                    size={20}
+                    size={22}
                     color={isFav ? PRIMARY : SUBTLE}
                   />
                 </TouchableOpacity>
 
-                <Ionicons name="chevron-forward" size={16} color={MUTED} />
-              </TouchableOpacity>
+                <Text style={styles.chev}>›</Text>
+              </View>
             );
           })}
 
@@ -179,7 +201,7 @@ export default function PaathList() {
         <View style={{ height: 24 }} />
       </ScrollView>
 
-      {/* About modal */}
+      {/* Light-background modal (purple-accented) */}
       <Modal
         visible={aboutVisible}
         transparent
@@ -205,76 +227,199 @@ export default function PaathList() {
   );
 }
 
-/* ===== Theme ===== */
-const SAFFRON    = '#E06B1F';
-const TEAL       = '#13302E';
-const IVORY      = '#F8F1E6';
-const PARCHMENT  = '#FBF6EE';
-const IVORY_DEEP = '#F0E6D4';
-const INK        = '#1A1612';
-const MUTED      = '#6B6054';
-const PRIMARY    = SAFFRON;
-const BORDER     = IVORY_DEEP;
-const BG         = PARCHMENT;
-const WASH       = IVORY;
-const TEXT       = INK;
-const SUBTLE     = MUTED;
+/* ===== Theme (purple, light UI) ===== */
+const PRIMARY = '#8076BE';
+const BORDER = 'rgba(128, 118, 190, 0.26)';
+const BG = '#FFFFFF';
+const WASH = '#F5F3FF'; // light purple wash
+const TEXT = '#1F2328';
+const SUBTLE = '#6B7280';
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: BG },
 
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 30 },
+  scrollContent: {
+    paddingHorizontal: 30,
+    paddingBottom: 30,
+  },
 
-  eyebrow: { fontFamily: 'Inter-SemiBold', fontSize: 10, color: SAFFRON, letterSpacing: 1.6, marginTop: 16, marginBottom: 4 },
-  header: { fontFamily: 'Fraunces-Regular', fontSize: 36, color: TEAL, lineHeight: 40 },
-  headerGurmukhi: { fontFamily: 'NotoSansGurmukhi', fontSize: 22, color: SAFFRON, marginTop: 4, marginBottom: 20 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 10,
+  },
+  header: {
+    flex: 1,
+    fontSize: 22,
+    fontWeight: '700',
+    color: PRIMARY,
+    marginBottom: 10,
 
-  headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10 },
-  infoPill: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 999, backgroundColor: WASH, borderWidth: 1, borderColor: BORDER },
-  infoPillText: { color: PRIMARY, fontFamily: 'Inter-SemiBold', fontSize: 12 },
+  },
+  infoPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: WASH,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  infoPillText: {
+    color: PRIMARY,
+    fontWeight: '700',
+    fontSize: 12,
+  },
+
+  /* Search */
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: WASH,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+    gap: 8,
+  },
+  searchIcon: {
+    fontSize: 16,
+    color: PRIMARY,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: TEXT,
+  },
+  clear: {
+    fontSize: 16,
+    color: PRIMARY,
+    paddingLeft: 4,
+  },
 
   /* Filters */
-  filtersRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  filterPill: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
-    backgroundColor: WASH, borderWidth: 1, borderColor: BORDER,
+  filtersRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
   },
-  filterPillActive: { backgroundColor: IVORY_DEEP, borderColor: SAFFRON },
-  filterText: { color: SUBTLE, fontFamily: 'Inter-SemiBold', fontSize: 12 },
-  filterTextActive: { color: SAFFRON },
+  filterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#F7F6FF',
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  filterPillActive: {
+    backgroundColor: '#ECE8FF',
+    borderColor: PRIMARY,
+  },
+  filterText: {
+    color: SUBTLE,
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  filterTextActive: {
+    color: PRIMARY,
+  },
 
   /* List */
-  list: { gap: 8 },
-  row: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: BG,
-    borderRadius: 14, paddingVertical: 14, paddingRight: 14,
-    borderWidth: 1, borderColor: BORDER, overflow: 'hidden',
+  list: {
+    gap: 10,
   },
-  rowAccent: { width: 3, alignSelf: 'stretch', backgroundColor: SAFFRON, borderRadius: 2, marginRight: 12 },
-  textWrap: { flex: 1, paddingRight: 8 },
-  titleGurmukhi: { fontFamily: 'NotoSansGurmukhi', fontSize: 16, color: INK, lineHeight: 24 },
-  titleEnglish: { fontFamily: 'Inter-Regular', fontSize: 12, color: MUTED, marginTop: 2 },
-  title: { fontSize: 15, fontFamily: 'Inter-SemiBold', color: TEXT },
-  hint: { fontSize: 12, marginTop: 2, color: MUTED, fontFamily: 'Inter-Regular' },
-  starHitbox: { paddingHorizontal: 6, paddingVertical: 4, marginRight: 8, borderRadius: 10 },
-  chev: { fontSize: 24, lineHeight: 24, color: MUTED },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: BG,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  textWrap: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: TEXT,
+  },
+  hint: {
+    fontSize: 12,
+    marginTop: 2,
+    color: PRIMARY,
+  },
+  starHitbox: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    marginRight: 6,
+    borderRadius: 10,
+  },
+  chev: {
+    fontSize: 24,
+    lineHeight: 24,
+    color: PRIMARY,
+  },
 
   /* Empty state */
   empty: {
-    alignItems: 'center', justifyContent: 'center', paddingVertical: 24,
-    borderRadius: 14, borderWidth: 1, borderColor: BORDER, backgroundColor: WASH,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: WASH,
   },
-  emptyText: { color: SUBTLE, fontSize: 14, fontFamily: 'Inter-Regular' },
+  emptyText: {
+    color: SUBTLE,
+    fontSize: 14,
+  },
 
-  /* Modal */
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.25)', justifyContent: 'center', padding: 20 },
-  modalCard: { backgroundColor: BG, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: BORDER },
-  modalTitle: { fontSize: 18, fontFamily: 'Fraunces-Regular', color: TEAL, marginBottom: 8 },
-  modalBody: { fontSize: 14, lineHeight: 20, color: SUBTLE, fontFamily: 'Inter-Regular' },
-  modalCloseBtn: {
-    backgroundColor: IVORY_DEEP, borderRadius: 12, paddingVertical: 10,
-    alignItems: 'center', marginTop: 12, borderWidth: 1, borderColor: BORDER,
+  /* Modal — light background with purple accents */
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    justifyContent: 'center',
+    padding: 20,
   },
-  modalCloseText: { color: TEAL, fontFamily: 'Inter-SemiBold', fontSize: 14 },
+  modalCard: {
+    backgroundColor: '#FBFAFF', // extra-light
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: PRIMARY,
+    marginBottom: 8,
+  },
+  modalBody: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: SUBTLE,
+  },
+  modalCloseBtn: {
+    backgroundColor: '#ECE8FF',
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  modalCloseText: {
+    color: PRIMARY,
+    fontWeight: '700',
+    fontSize: 14,
+  },
 });
