@@ -55,7 +55,7 @@ export default function PaathList() {
 
   return (
     <SafeAreaView
-      style={[styles.safeArea, { paddingTop: insets.top }]}
+      style={styles.safeArea}
       edges={['top', 'left', 'right']}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
