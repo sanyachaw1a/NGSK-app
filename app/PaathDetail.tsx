@@ -333,8 +333,21 @@ export default function PaathDetail() {
   const Separator = useCallback(() => <View accessible style={styles.divider} />, []);
 
   const ListHeader = useMemo(() => {
+    const parts = paathName.split(' | ');
+    const gurmukhiTitle = parts[0] || paathName;
+    const englishTitle  = parts[1] || '';
     return (
       <View>
+        {/* Header card */}
+        <View style={styles.headerCard}>
+          <Text style={styles.titleGurmukhi}>{gurmukhiTitle}</Text>
+          {!!englishTitle && <Text style={styles.titleEnglish}>{englishTitle}</Text>}
+          <View style={styles.headerDivider} />
+          <Text style={styles.headerStats}>
+            {verses.length > 0 ? `${verses.length} VERSES` : 'NO VERSES AVAILABLE'}
+          </Text>
+        </View>
+
         {/* Toolbar */}
         <View style={styles.toolbar} accessibilityRole="toolbar" accessible>
           <View style={styles.ttLogo}>
@@ -366,7 +379,7 @@ export default function PaathDetail() {
       </View>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fontSize, showGurmukhi, showHindi, showEnglish]);
+  }, [paathName, verses.length, fontSize, showGurmukhi, showHindi, showEnglish]);
 
   if (loading) {
     return (

@@ -153,7 +153,7 @@ export default function Layout() {
           <Stack.Screen
             name="PaathDetail"
             component={PaathDetail}
-            options={({ route }) => ({ title: route.params.paathName })}
+            options={{ title: '' }}
           />
         </Stack.Navigator>
       </View>
