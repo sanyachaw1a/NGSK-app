@@ -48,7 +48,7 @@ export default function BhagatBaniList() {
   return (
     <SafeAreaView
       style={styles.safeArea}
-      edges={['top', 'left', 'right']}
+      edges={['left', 'right', 'bottom']}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.eyebrow}>BHAGAT BANI · GURBANI</Text>
