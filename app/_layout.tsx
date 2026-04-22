@@ -15,12 +15,14 @@ import MainScreen from './index';
 import SecondScreen from './SecondScreen';
 import PaathList from './PaathList';
 import PaathDetail from './PaathDetail';
+import BhagatBaniList from './BhagatBaniList';
 
 export type RootStackParamList = {
   Tabs: undefined;
   MainScreen: undefined;
   SecondScreen: undefined;
   PaathScreen: undefined;
+  BhagatBaniList: undefined;
   PaathDetail: { paathName: string };
 };
 
@@ -143,6 +145,11 @@ export default function Layout() {
       <View style={{ flex: 1 }}>
         <Stack.Navigator>
           <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
+          <Stack.Screen
+            name="BhagatBaniList"
+            component={BhagatBaniList}
+            options={{ title: 'Bhagat Bani', headerBackTitle: 'Paath' }}
+          />
           <Stack.Screen
             name="PaathDetail"
             component={PaathDetail}

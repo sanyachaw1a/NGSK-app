@@ -79,37 +79,6 @@ const LOCAL_BY_TOKEN: Record<string, any> = {
   bhagat_prabhaati:    require('../assets/paath/bhagat_prabhaati.json'),
 };
 
-/* ---------- Bhagat Bani raag definitions (in canonical order) ---------- */
-interface RaagDef { token: string; gurmukhi: string; english: string; }
-const BHAGAT_BANI_RAAGS: RaagDef[] = [
-  { token: 'bhagat_sriraag',    gurmukhi: 'ਰਾਗੁ ਸਿਰੀਰਾਗੁ',    english: 'Raag Sireeraag' },
-  { token: 'bhagat_gauri',      gurmukhi: 'ਰਾਗੁ ਗਉੜੀ',         english: 'Raag Gaudi' },
-  { token: 'bhagat_aasa',       gurmukhi: 'ਰਾਗੁ ਆਸਾ',           english: 'Raag Aasaa' },
-  { token: 'bhagat_gujri',      gurmukhi: 'ਰਾਗੁ ਗੂਜਰੀ',         english: 'Raag Goojree' },
-  { token: 'bhagat_sorat',      gurmukhi: 'ਰਾਗੁ ਸੋਰਠਿ',         english: 'Raag Sorath' },
-  { token: 'bhagat_dhanasari',  gurmukhi: 'ਰਾਗੁ ਧਨਾਸਰੀ',        english: 'Raag Dhanaasree' },
-  { token: 'bhagat_jaitsree',   gurmukhi: 'ਰਾਗੁ ਜੈਤਸਰੀ',        english: 'Raag Jaethsree' },
-  { token: 'bhagat_toddee',     gurmukhi: 'ਰਾਗੁ ਟੋਡੀ',          english: 'Raag Todee' },
-  { token: 'bhagat_tilang',     gurmukhi: 'ਰਾਗੁ ਤਿਲੰਗ',         english: 'Raag Tilang' },
-  { token: 'bhagat_soohee',     gurmukhi: 'ਰਾਗੁ ਸੂਹੀ',          english: 'Raag Soohee' },
-  { token: 'bhagat_bilaaval',   gurmukhi: 'ਰਾਗੁ ਬਿਲਾਵਲੁ',       english: 'Raag Bilaaval' },
-  { token: 'bhagat_gond',       gurmukhi: 'ਰਾਗੁ ਗੋਂਡ',           english: 'Raag Gond' },
-  { token: 'bhagat_ramkali',    gurmukhi: 'ਰਾਗੁ ਰਾਮਕਲੀ',        english: 'Raag Raamkalee' },
-  { token: 'bhagat_maaligauri', gurmukhi: 'ਰਾਗੁ ਮਾਲੀ ਗਉੜਾ',     english: 'Raag Maalee Gaudaa' },
-  { token: 'bhagat_maaru',      gurmukhi: 'ਰਾਗੁ ਮਾਰੂ',          english: 'Raag Maaroo' },
-  { token: 'bhagat_kedaara',    gurmukhi: 'ਰਾਗੁ ਕੇਦਾਰਾ',        english: 'Raag Kedaaraa' },
-  { token: 'bhagat_bhairo',     gurmukhi: 'ਰਾਗੁ ਭੈਰਉ',          english: 'Raag Bhaero' },
-  { token: 'bhagat_basant',     gurmukhi: 'ਰਾਗੁ ਬਸੰਤੁ',         english: 'Raag Basanth' },
-  { token: 'bhagat_saarang',    gurmukhi: 'ਰਾਗੁ ਸਾਰੰਗ',         english: 'Raag Saarang' },
-  { token: 'bhagat_malaar',     gurmukhi: 'ਰਾਗੁ ਮਲਾਰ',          english: 'Raag Malaar' },
-  { token: 'bhagat_kaanra',     gurmukhi: 'ਰਾਗੁ ਕਾਨੜਾ',         english: 'Raag Kaanadaa' },
-  { token: 'bhagat_prabhaati',  gurmukhi: 'ਰਾਗੁ ਪ੍ਰਭਾਤੀ',       english: 'Raag Prabhaatee' },
-];
-
-/* ---------- List item type (verse or raag section header) ---------- */
-interface SectionHeader { _sectionHeader: true; gurmukhi: string; english: string; raagIndex: number; }
-type ListItem = VerseData | SectionHeader;
-
 /* ---------- Display name -> SQLite token(s) ---------- */
 const paathToToken: Record<string, string | string[]> = {
   '\u0A1C\u0A2A\u0A41\u0A1C\u0A40 \u0A38\u0A3E\u0A39\u0A3F\u0A2C | Japji Sahib':             'japji',
@@ -132,7 +101,29 @@ const paathToToken: Record<string, string | string[]> = {
   'ਭਗਤ ਬਾਣੀ - ਸਲੋਕ ਭਗਤ ਫਰੀਦ ਜੀ ਕੇ | Bhagat Bani - Salok Bhagat Fareed Ji ke':              'salokfareed',
   'Bai Vaaran':                                                                                 'vaarkabirjee',
   'ਸਲੋਕ ਸਹਸਕ੍ਰਿਤੀ | Salok Sahaskriti':                                                        'sahaskriti_shlok',
-  'ਭਗਤ ਬਾਣੀ | Bhagat Bani':                                                                   BHAGAT_BANI_RAAGS.map(r => r.token),
+  // Bhagat Bani raags — navigated from BhagatBaniList
+  'ਰਾਗੁ ਸਿਰੀਰਾਗੁ | Raag Sireeraag':      'bhagat_sriraag',
+  'ਰਾਗੁ ਗਉੜੀ | Raag Gaudi':              'bhagat_gauri',
+  'ਰਾਗੁ ਆਸਾ | Raag Aasaa':               'bhagat_aasa',
+  'ਰਾਗੁ ਗੂਜਰੀ | Raag Goojree':           'bhagat_gujri',
+  'ਰਾਗੁ ਸੋਰਠਿ | Raag Sorath':            'bhagat_sorat',
+  'ਰਾਗੁ ਧਨਾਸਰੀ | Raag Dhanaasree':       'bhagat_dhanasari',
+  'ਰਾਗੁ ਜੈਤਸਰੀ | Raag Jaethsree':        'bhagat_jaitsree',
+  'ਰਾਗੁ ਟੋਡੀ | Raag Todee':              'bhagat_toddee',
+  'ਰਾਗੁ ਤਿਲੰਗ | Raag Tilang':            'bhagat_tilang',
+  'ਰਾਗੁ ਸੂਹੀ | Raag Soohee':             'bhagat_soohee',
+  'ਰਾਗੁ ਬਿਲਾਵਲੁ | Raag Bilaaval':        'bhagat_bilaaval',
+  'ਰਾਗੁ ਗੋਂਡ | Raag Gond':               'bhagat_gond',
+  'ਰਾਗੁ ਰਾਮਕਲੀ | Raag Raamkalee':        'bhagat_ramkali',
+  'ਰਾਗੁ ਮਾਲੀ ਗਉੜਾ | Raag Maalee Gaudaa': 'bhagat_maaligauri',
+  'ਰਾਗੁ ਮਾਰੂ | Raag Maaroo':             'bhagat_maaru',
+  'ਰਾਗੁ ਕੇਦਾਰਾ | Raag Kedaaraa':         'bhagat_kedaara',
+  'ਰਾਗੁ ਭੈਰਉ | Raag Bhaero':             'bhagat_bhairo',
+  'ਰਾਗੁ ਬਸੰਤੁ | Raag Basanth':           'bhagat_basant',
+  'ਰਾਗੁ ਸਾਰੰਗ | Raag Saarang':           'bhagat_saarang',
+  'ਰਾਗੁ ਮਲਾਰ | Raag Malaar':             'bhagat_malaar',
+  'ਰਾਗੁ ਕਾਨੜਾ | Raag Kaanadaa':          'bhagat_kaanra',
+  'ਰਾਗੁ ਪ੍ਰਭਾਤੀ | Raag Prabhaatee':     'bhagat_prabhaati',
 };
 
 /* ---------- Verse loading ---------- */
@@ -168,28 +159,9 @@ function jsonFallback(tokens: string[]): VerseData[] {
   return out;
 }
 
-async function getVerses(paathName: string): Promise<ListItem[]> {
+async function getVerses(paathName: string): Promise<VerseData[]> {
   const mapping = paathToToken[paathName];
   if (!mapping) throw new Error(`No token mapping for "${paathName}"`);
-
-  if (paathName.includes('Bhagat Bani') && !paathName.includes('Salok')) {
-    const items: ListItem[] = [];
-    for (let i = 0; i < BHAGAT_BANI_RAAGS.length; i++) {
-      const raag = BHAGAT_BANI_RAAGS[i];
-      items.push({ _sectionHeader: true, gurmukhi: raag.gurmukhi, english: raag.english, raagIndex: i });
-      const seeded = await isTokenSeeded(raag.token);
-      let verses: VerseData[];
-      if (seeded) {
-        const rows = await getVersesByTokens([raag.token]);
-        verses = rows.length > 0 ? rows.map(rowToVerseData) : jsonFallback([raag.token]);
-      } else {
-        verses = jsonFallback([raag.token]);
-      }
-      items.push(...verses);
-    }
-    return items;
-  }
-
   const tokens = Array.isArray(mapping) ? mapping : [mapping];
   const seededFlags = await Promise.all(tokens.map(isTokenSeeded));
   if (seededFlags.every(Boolean)) {
@@ -303,7 +275,7 @@ export default function PaathDetail() {
   const { paathName } = route.params;
 
   const [loading, setLoading]       = useState(true);
-  const [verses, setVerses]         = useState<ListItem[]>([]);
+  const [verses, setVerses]         = useState<VerseData[]>([]);
   const [error, setError]           = useState<string | null>(null);
   const [fontSize, setFontSize]     = useState(22);
   const MIN_SIZE = 12, MAX_SIZE = 40;
@@ -331,10 +303,9 @@ export default function PaathDetail() {
     return () => { cancelled = true; };
   }, [paathName]);
 
-  /* Only include items with something to show; section headers always pass through */
+  /* Only include verses that have something to show given current toggles */
   const displayVerses = useMemo(() =>
     verses.filter(v => {
-      if ('_sectionHeader' in v) return true;
       const g = v.verse?.verse?.unicode || v.verse?.verse?.gurmukhi;
       const h = v.verse?.transliteration?.hindi;
       const e = v.verse?.translation?.en?.ssk || v.verse?.translation?.en?.ms || v.verse?.translation?.en?.bdb;
@@ -348,21 +319,16 @@ export default function PaathDetail() {
     [fontSize, showGurmukhi, showHindi, showEnglish]
   );
 
-  const renderItem = useCallback(({ item }: { item: ListItem }) => {
-    if ('_sectionHeader' in item) {
-      return <RaagSectionHeader gurmukhi={item.gurmukhi} english={item.english} />;
-    }
-    return (
-      <VerseItem
-        verse={item}
-        fontSize={fontSize}
-        minSize={MIN_SIZE}
-        showGurmukhi={showGurmukhi}
-        showHindi={showHindi}
-        showEnglish={showEnglish}
-      />
-    );
-  }, [fontSize, showGurmukhi, showHindi, showEnglish]);
+  const renderItem = useCallback(({ item }: { item: VerseData }) => (
+    <VerseItem
+      verse={item}
+      fontSize={fontSize}
+      minSize={MIN_SIZE}
+      showGurmukhi={showGurmukhi}
+      showHindi={showHindi}
+      showEnglish={showEnglish}
+    />
+  ), [fontSize, showGurmukhi, showHindi, showEnglish]);
 
   const Separator = useCallback(() => <View accessible style={styles.divider} />, []);
 
@@ -378,9 +344,7 @@ export default function PaathDetail() {
           {!!englishTitle && <Text style={styles.titleEnglish}>{englishTitle}</Text>}
           <View style={styles.headerDivider} />
           <Text style={styles.headerStats}>
-            {verses.length > 0
-              ? `${verses.filter(v => !('_sectionHeader' in v)).length} VERSES`
-              : 'NO VERSES AVAILABLE'}
+            {verses.length > 0 ? `${verses.length} VERSES` : 'NO VERSES AVAILABLE'}
           </Text>
         </View>
 
@@ -432,7 +396,7 @@ export default function PaathDetail() {
     <SafeAreaView style={styles.screen}>
       <FlatList
         data={displayVerses}
-        keyExtractor={(item, i) => ('_sectionHeader' in item ? `section-${(item as SectionHeader).raagIndex}` : String(i))}
+        keyExtractor={(_, i) => String(i)}
         renderItem={renderItem}
         ItemSeparatorComponent={Separator}
         ListHeaderComponent={ListHeader}
@@ -453,18 +417,6 @@ export default function PaathDetail() {
         contentContainerStyle={styles.content}
       />
     </SafeAreaView>
-  );
-}
-
-function RaagSectionHeader({ gurmukhi, english }: { gurmukhi: string; english: string }) {
-  return (
-    <View style={styles.raagHeader}>
-      <View style={styles.raagHeaderAccent} />
-      <View style={styles.raagHeaderText}>
-        <Text style={styles.raagHeaderGurmukhi}>{gurmukhi}</Text>
-        <Text style={styles.raagHeaderEnglish}>{english}</Text>
-      </View>
-    </View>
   );
 }
 
@@ -545,17 +497,6 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: 'row', alignItems: 'center' },
   legendDot:  { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
   legendText: { fontSize: 12, color: SUBTLE, fontFamily: 'Inter-Regular' },
-
-  raagHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: 16, marginTop: 20, marginBottom: 8,
-    backgroundColor: CARD_BG, borderRadius: 12,
-    borderWidth: 1, borderColor: IVORY_DEEP, overflow: 'hidden',
-  },
-  raagHeaderAccent: { width: 4, alignSelf: 'stretch', backgroundColor: SAFFRON },
-  raagHeaderText:   { flex: 1, paddingVertical: 12, paddingHorizontal: 12 },
-  raagHeaderGurmukhi: { fontFamily: 'NotoSansGurmukhi', fontSize: 17, color: TEAL, lineHeight: 26 },
-  raagHeaderEnglish:  { fontFamily: 'Fraunces-LightItalic', fontSize: 12, color: MUTED, marginTop: 2 },
 
   verseBlock: { paddingVertical: 14, paddingHorizontal: 16 },
   divider:    { height: Math.max(1, StyleSheet.hairlineWidth * 2), backgroundColor: BORDER, marginHorizontal: 16, marginVertical: 6, opacity: 1 },

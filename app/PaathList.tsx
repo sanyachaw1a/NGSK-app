@@ -46,7 +46,11 @@ export default function PaathList() {
   ];
 
   const handlePress = (paathName: string) => {
-    navigation.navigate('PaathDetail', { paathName });
+    if (paathName === 'ਭਗਤ ਬਾਣੀ | Bhagat Bani') {
+      navigation.navigate('BhagatBaniList');
+    } else {
+      navigation.navigate('PaathDetail', { paathName });
+    }
   };
 
   return (
