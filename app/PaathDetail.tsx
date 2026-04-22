@@ -1,5 +1,5 @@
 // PaathDetail.tsx — SQLite-backed with virtualized FlatList
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,13 @@ import {
   FlatList,
   SafeAreaView,
   Pressable,
+  Modal,
   AccessibilityInfo,
   Platform,
 } from 'react-native';
-import { RouteProp, useRoute } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
+import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import { RootStackParamList } from './_layout';
 import { getVersesByTokens, isTokenSeeded, type VerseRow } from '../lib/db';
 
@@ -54,6 +57,7 @@ const LOCAL_BY_TOKEN: Record<string, any> = {
   sahaskriti_shlok:    require('../assets/paath/sahaskriti_shlok.json'),
   savaiye:             require('../assets/paath/savaiye.json'),
   bhagatbani:          require('../assets/paath/bhagat_bani_-_shlok_kabir_ji_ke.json'),
+  salokfareed:         require('../assets/paath/Salok_Bhagat_Fareed_Ji_Ke.json'),
   bhagat_sriraag:      require('../assets/paath/bhagat_sriraag.json'),
   bhagat_gauri:        require('../assets/paath/bhagat_gauri.json'),
   bhagat_aasa:         require('../assets/paath/bhagat_aasa.json'),
@@ -78,7 +82,7 @@ const LOCAL_BY_TOKEN: Record<string, any> = {
   bhagat_prabhaati:    require('../assets/paath/bhagat_prabhaati.json'),
 };
 
-/* ---------- Bhagat Bani raag definitions (in canonical order) ---------- */
+/* ---------- Bhagat Bani raag definitions ---------- */
 interface RaagDef { token: string; gurmukhi: string; english: string; }
 const BHAGAT_BANI_RAAGS: RaagDef[] = [
   { token: 'bhagat_sriraag',    gurmukhi: 'ਰਾਗੁ ਸਿਰੀਰਾਗੁ',    english: 'Raag Sireeraag' },
@@ -105,32 +109,53 @@ const BHAGAT_BANI_RAAGS: RaagDef[] = [
   { token: 'bhagat_prabhaati',  gurmukhi: 'ਰਾਗੁ ਪ੍ਰਭਾਤੀ',       english: 'Raag Prabhaatee' },
 ];
 
-/* ---------- List item type (verse or section header) ---------- */
+/* ---------- List item type ---------- */
 interface SectionHeader { _sectionHeader: true; gurmukhi: string; english: string; raagIndex: number; }
 type ListItem = VerseData | SectionHeader;
 
 /* ---------- Display name -> SQLite token(s) ---------- */
 const paathToToken: Record<string, string | string[]> = {
-  '\u0A1C\u0A2A\u0A41\u0A1C\u0A40 \u0A38\u0A3E\u0A39\u0A3F\u0A2C | Japji Sahib':             'japji',
-  '\u0A38\u0A41\u0A16\u0A2E\u0A28\u0A40 \u0A38\u0A3E\u0A39\u0A3F\u0A2C | Sukhmani Sahib':      'sukhmani',
-  '\u0A38\u0A32\u0A4B\u0A15 \u0A2E\u0A39\u0A32\u0A3E \u0A69 | Shlok Mahala 9':               'salokm9',
-  '\u0A15\u0A40\u0A30\u0A24\u0A28 \u0A38\u0A4B\u0A39\u0A3F\u0A32\u0A3E | Kirtan Sohila':      'sohila',
-  '\u0A38\u0A3C\u0A2C\u0A26 \u0A39\u0A1C\u0A3C\u0A3E\u0A30\u0A47 | Shabad Hazare':            'shabadhazare',
-  '\u0A06\u0A28\u0A70\u0A26 \u0A38\u0A3E\u0A39\u0A3F\u0A2C | Anand Sahib':                    'anand',
-  '\u0A1A\u0A4C\u0A2A\u0A08 \u0A38\u0A3E\u0A39\u0A3F\u0A2C | Chaupai Sahib':                  'chaupai',
-  '\u0A30\u0A39\u0A3F\u0A30\u0A3E\u0A38 \u0A38\u0A3E\u0A39\u0A3F\u0A2C | Rehraas Sahib':      'rehras',
-  '\u0A2C\u0A3E\u0A30\u0A39 \u0A2E\u0A3E\u0A39\u0A3E \u0A2E\u0A3E\u0A02\u0A1D | Barah Maha Manjh': 'baarehmaha',
-  '\u0A06\u0A30\u0A24\u0A40 | Aarti':                                                           'aarti',
-  '\u0A38\u0A3F\u0A27 \u0A17\u0A4B\u0A38\u0A1F\u0A3F | Sidh Gosht':                           'sidhgosht',
-  '\u0A2C\u0A3E\u0A35\u0A28 \u0A05\u0A16\u0A30\u0A40 | Bavan Akhri':                          'bavanakhree',
-  '\u0A26\u0A16\u0A23\u0A40 \u0A13\u0A05\u0A70\u0A15\u0A3E\u0A30\u0A41 | Dakhni Oankar':      'dhakhnioankar',
-  '\u0A26\u0A41\u0A16 \u0A2D\u0A70\u0A1C\u0A28\u0A40 \u0A38\u0A3E\u0A39\u0A3F\u0A2C | Dukh Banjani Sahib': 'dukhbhanjani',
-  '\u0A06\u0A38\u0A3E \u0A26\u0A40 \u0A35\u0A3E\u0A30 | Asa Di Vaar':                         'asadivar',
-  'Savaiye':                                                                                    'savaiye',
-  'Bhagat Bani - Shlok Kabir Ji ke':                                                           'bhagatbani',
-  'Bai Vaaran':                                                                                 'vaarkabirjee',
-  'Sahaskriti Shlok':                                                                          'sahaskriti_shlok',
-  '\u0A2D\u0A17\u0A24 \u0A2C\u0A3E\u0A23\u0A40 | Bhagat Bani':                               BHAGAT_BANI_RAAGS.map(r => r.token),
+  'ਜਪੁਜੀ ਸਾਹਿਬ | Japji Sahib':             'japji',
+  'ਸੁਖਮਨੀ ਸਾਹਿਬ | Sukhmani Sahib':          'sukhmani',
+  'ਸਲੋਕ ਮਹਲਾ ੯ | Shlok Mahala 9':           'salokm9',
+  'ਕੀਰਤਨ ਸੋਹਿਲਾ | Kirtan Sohila':           'sohila',
+  'ਸ਼ਬਦ ਹਜ਼ਾਰੇ | Shabad Hazare':             'shabadhazare',
+  'ਆਨੰਦ ਸਾਹਿਬ | Anand Sahib':               'anand',
+  'ਚੌਪਈ ਸਾਹਿਬ | Chaupai Sahib':             'chaupai',
+  'ਰਹਿਰਾਸ ਸਾਹਿਬ | Rehraas Sahib':           'rehras',
+  'ਬਾਰਹ ਮਾਹਾ ਮਾਂਝ | Barah Maha Manjh':      'baarehmaha',
+  'ਆਰਤੀ | Aarti':                            'aarti',
+  'ਸਿਧ ਗੋਸਟਿ | Sidh Gosht':                 'sidhgosht',
+  'ਬਾਵਨ ਅਖਰੀ | Bavan Akhri':                'bavanakhree',
+  'ਦਖਣੀ ਓਅੰਕਾਰੁ | Dakhni Oankar':           'dhakhnioankar',
+  'ਦੁਖ ਭੰਜਨੀ ਸਾਹਿਬ | Dukh Banjani Sahib':  'dukhbhanjani',
+  'ਆਸਾ ਦੀ ਵਾਰ | Asa Di Vaar':               'asadivar',
+  'ਭਗਤ ਬਾਣੀ - ਸਲੋਕ ਕਬੀਰ ਜੀ ਕੇ | Bhagat Bani - Salok Kabir Ji ke': 'bhagatbani',
+  'ਭਗਤ ਬਾਣੀ - ਸਲੋਕ ਭਗਤ ਫਰੀਦ ਜੀ ਕੇ | Bhagat Bani - Salok Bhagat Fareed Ji ke': 'salokfareed',
+  'ਸਲੋਕ ਸਹਸਕ੍ਰਿਤੀ | Salok Sahaskriti':     'sahaskriti_shlok',
+  'ਸਵੈਯੇ | Savaiye':                         'savaiye',
+  'ਰਾਗੁ ਸਿਰੀਰਾਗੁ | Raag Sireeraag':         'bhagat_sriraag',
+  'ਰਾਗੁ ਗਉੜੀ | Raag Gaudi':                 'bhagat_gauri',
+  'ਰਾਗੁ ਆਸਾ | Raag Aasaa':                   'bhagat_aasa',
+  'ਰਾਗੁ ਗੂਜਰੀ | Raag Goojree':               'bhagat_gujri',
+  'ਰਾਗੁ ਸੋਰਠਿ | Raag Sorath':               'bhagat_sorat',
+  'ਰਾਗੁ ਧਨਾਸਰੀ | Raag Dhanaasree':          'bhagat_dhanasari',
+  'ਰਾਗੁ ਜੈਤਸਰੀ | Raag Jaethsree':           'bhagat_jaitsree',
+  'ਰਾਗੁ ਟੋਡੀ | Raag Todee':                 'bhagat_toddee',
+  'ਰਾਗੁ ਤਿਲੰਗ | Raag Tilang':               'bhagat_tilang',
+  'ਰਾਗੁ ਸੂਹੀ | Raag Soohee':                'bhagat_soohee',
+  'ਰਾਗੁ ਬਿਲਾਵਲੁ | Raag Bilaaval':           'bhagat_bilaaval',
+  'ਰਾਗੁ ਗੋਂਡ | Raag Gond':                   'bhagat_gond',
+  'ਰਾਗੁ ਰਾਮਕਲੀ | Raag Raamkalee':           'bhagat_ramkali',
+  'ਰਾਗੁ ਮਾਲੀ ਗਉੜਾ | Raag Maalee Gaudaa':   'bhagat_maaligauri',
+  'ਰਾਗੁ ਮਾਰੂ | Raag Maaroo':                'bhagat_maaru',
+  'ਰਾਗੁ ਕੇਦਾਰਾ | Raag Kedaaraa':            'bhagat_kedaara',
+  'ਰਾਗੁ ਭੈਰਉ | Raag Bhaero':                'bhagat_bhairo',
+  'ਰਾਗੁ ਬਸੰਤੁ | Raag Basanth':              'bhagat_basant',
+  'ਰਾਗੁ ਸਾਰੰਗ | Raag Saarang':              'bhagat_saarang',
+  'ਰਾਗੁ ਮਲਾਰ | Raag Malaar':                'bhagat_malaar',
+  'ਰਾਗੁ ਕਾਨੜਾ | Raag Kaanadaa':             'bhagat_kaanra',
+  'ਰਾਗੁ ਪ੍ਰਭਾਤੀ | Raag Prabhaatee':        'bhagat_prabhaati',
 };
 
 /* ---------- Verse loading ---------- */
@@ -170,26 +195,6 @@ async function getVerses(paathName: string): Promise<ListItem[]> {
   const mapping = paathToToken[paathName];
   if (!mapping) throw new Error(`No token mapping for "${paathName}"`);
 
-  const isBhagatBani = paathName.includes('Bhagat Bani');
-
-  if (isBhagatBani) {
-    const items: ListItem[] = [];
-    for (let i = 0; i < BHAGAT_BANI_RAAGS.length; i++) {
-      const raag = BHAGAT_BANI_RAAGS[i];
-      items.push({ _sectionHeader: true, gurmukhi: raag.gurmukhi, english: raag.english, raagIndex: i });
-      const seeded = await isTokenSeeded(raag.token);
-      let verses: VerseData[];
-      if (seeded) {
-        const rows = await getVersesByTokens([raag.token]);
-        verses = rows.map(rowToVerseData);
-      } else {
-        verses = jsonFallback([raag.token]);
-      }
-      items.push(...verses);
-    }
-    return items;
-  }
-
   const tokens = Array.isArray(mapping) ? mapping : [mapping];
   const seededFlags = await Promise.all(tokens.map(isTokenSeeded));
   if (seededFlags.every(Boolean)) {
@@ -201,7 +206,7 @@ async function getVerses(paathName: string): Promise<ListItem[]> {
   throw new Error(`No verses found for "${paathName}"`);
 }
 
-/* ---------- Visraam (module-level so renderItem doesn't recreate them) ---------- */
+/* ---------- Visraam ---------- */
 const VISRAAM_COLORS: Record<string, string> = { v: '#e28324ff', y: '#69a33fff', m: '#69a33fff' };
 
 function pickVisraam(v?: Visraam): VisraamMark[] {
@@ -218,7 +223,7 @@ const FONTS = {
   devanagari: Platform.select({ ios: 'Times New Roman', android: 'NotoSansDevanagari-Regular' }),
 };
 
-/* ---------- GurmukhiWithVisraam (module-level — no captures from component state) ---------- */
+/* ---------- GurmukhiWithVisraam ---------- */
 function GurmukhiWithVisraam({ text, marks, fs }: { text: string; marks: VisraamMark[]; fs: number }) {
   const words = text.split(/\s+/);
   const map = new Map<number, string>();
@@ -246,7 +251,7 @@ function GurmukhiWithVisraam({ text, marks, fs }: { text: string; marks: Visraam
   );
 }
 
-/* ---------- VerseItem (module-level component for stable FlatList rendering) ---------- */
+/* ---------- VerseItem ---------- */
 interface VerseItemProps {
   verse: VerseData;
   fontSize: number;
@@ -259,13 +264,13 @@ interface VerseItemProps {
 const VerseItem = React.memo(function VerseItem({
   verse: v, fontSize, minSize, showGurmukhi, showHindi, showEnglish,
 }: VerseItemProps) {
-  const gurmukhi      = v.verse?.verse?.unicode || v.verse?.verse?.gurmukhi || '';
+  const gurmukhi        = v.verse?.verse?.unicode || v.verse?.verse?.gurmukhi || '';
   const transliteration = v.verse?.transliteration?.hindi || '';
-  const translation   =
+  const translation     =
     v.verse?.translation?.en?.ssk ||
     v.verse?.translation?.en?.ms  ||
     v.verse?.translation?.en?.bdb || '';
-  const visraamMarks  = pickVisraam(v.verse?.visraam);
+  const visraamMarks    = pickVisraam(v.verse?.visraam);
 
   return (
     <View style={styles.verseBlock}>
@@ -292,25 +297,64 @@ const VerseItem = React.memo(function VerseItem({
   );
 });
 
+/* ---------- Bookmark key ---------- */
+const BOOKMARKS_KEY = 'paath_bookmarks_v1';
+
 /* ========== Main screen ========== */
 export default function PaathDetail() {
-  const route = useRoute<PaathDetailRouteProp>();
+  const route      = useRoute<PaathDetailRouteProp>();
+  const navigation = useNavigation<any>();
   const { paathName } = route.params;
 
-  const [loading, setLoading]       = useState(true);
-  const [verses, setVerses]         = useState<ListItem[]>([]);
-  const [error, setError]           = useState<string | null>(null);
-  const [fontSize, setFontSize]     = useState(22);
+  const parts         = paathName.split(' | ');
+  const gurmukhiTitle = parts[0] || paathName;
+  const englishTitle  = parts[1] || '';
+
+  const [loading, setLoading]   = useState(true);
+  const [verses, setVerses]     = useState<ListItem[]>([]);
+  const [error, setError]       = useState<string | null>(null);
+
+  const [fontSize, setFontSize]         = useState(22);
   const MIN_SIZE = 12, MAX_SIZE = 40;
   const [showGurmukhi, setShowGurmukhi] = useState(true);
   const [showHindi, setShowHindi]       = useState(true);
   const [showEnglish, setShowEnglish]   = useState(true);
 
-  const announceSize = (dir: 'larger' | 'smaller') =>
-    AccessibilityInfo.announceForAccessibility?.(dir === 'larger' ? 'Text larger' : 'Text smaller');
-  const increaseFont = () => setFontSize(s => { const n = Math.min(MAX_SIZE, s + 2); if (n !== s) announceSize('larger'); return n; });
-  const decreaseFont = () => setFontSize(s => { const n = Math.max(MIN_SIZE, s - 2); if (n !== s) announceSize('smaller'); return n; });
+  const [isBookmarked, setIsBookmarked]   = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
 
+  const flatListRef = useRef<FlatList<ListItem>>(null);
+
+  /* Custom nav header — stacked Gurmukhi + English */
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerTitle: () => (
+        <View style={{ alignItems: 'center' }}>
+          <Text style={styles.navGurmukhi} numberOfLines={1} adjustsFontSizeToFit>
+            {gurmukhiTitle}
+          </Text>
+          {!!englishTitle && (
+            <Text style={styles.navEnglish} numberOfLines={1} adjustsFontSizeToFit>
+              {englishTitle}
+            </Text>
+          )}
+        </View>
+      ),
+    });
+  }, [navigation, gurmukhiTitle, englishTitle]);
+
+  /* Load bookmark state */
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(BOOKMARKS_KEY);
+        const arr: string[] = raw ? JSON.parse(raw) : [];
+        setIsBookmarked(arr.includes(paathName));
+      } catch {}
+    })();
+  }, [paathName]);
+
+  /* Load verses */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -326,7 +370,26 @@ export default function PaathDetail() {
     return () => { cancelled = true; };
   }, [paathName]);
 
-  /* Only include items that have something to show; section headers always pass through */
+  const announceSize = (dir: 'larger' | 'smaller') =>
+    AccessibilityInfo.announceForAccessibility?.(dir === 'larger' ? 'Text larger' : 'Text smaller');
+  const increaseFont = () => setFontSize(s => { const n = Math.min(MAX_SIZE, s + 2); if (n !== s) announceSize('larger'); return n; });
+  const decreaseFont = () => setFontSize(s => { const n = Math.max(MIN_SIZE, s - 2); if (n !== s) announceSize('smaller'); return n; });
+
+  const toggleBookmark = useCallback(async () => {
+    try {
+      const raw = await AsyncStorage.getItem(BOOKMARKS_KEY);
+      const arr: string[] = raw ? JSON.parse(raw) : [];
+      const already = arr.includes(paathName);
+      const next = already ? arr.filter(x => x !== paathName) : [...arr, paathName];
+      await AsyncStorage.setItem(BOOKMARKS_KEY, JSON.stringify(next));
+      setIsBookmarked(!already);
+    } catch {}
+  }, [paathName]);
+
+  const scrollToTop = useCallback(() => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, []);
+
   const displayVerses = useMemo(() =>
     verses.filter(v => {
       if ('_sectionHeader' in v) return true;
@@ -362,45 +425,17 @@ export default function PaathDetail() {
   const Separator = useCallback(() => <View accessible style={styles.divider} />, []);
 
   const ListHeader = useMemo(() => {
-    const parts = paathName.split(' | ');
-    const gurmukhiTitle = parts[0] || paathName;
-    const englishTitle  = parts[1] || '';
+    const verseCount = verses.filter(v => !('_sectionHeader' in v)).length;
     return (
       <View>
-        {/* Header card */}
         <View style={styles.headerCard}>
           <Text style={styles.titleGurmukhi}>{gurmukhiTitle}</Text>
           {!!englishTitle && <Text style={styles.titleEnglish}>{englishTitle}</Text>}
           <View style={styles.headerDivider} />
           <Text style={styles.headerStats}>
-            {verses.length > 0
-              ? `${verses.filter(v => !('_sectionHeader' in v)).length} VERSES`
-              : 'NO VERSES AVAILABLE'}
+            {verseCount > 0 ? `${verseCount} VERSES` : 'NO VERSES AVAILABLE'}
           </Text>
         </View>
-
-        {/* Toolbar */}
-        <View style={styles.toolbar} accessibilityRole="toolbar" accessible>
-          <View style={styles.ttLogo}>
-            <Text style={styles.ttSmall}>T</Text>
-            <Text style={styles.ttLarge}>T</Text>
-          </View>
-          <View style={styles.toolbarBtns}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Decrease text size" onPress={decreaseFont} style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]} hitSlop={8}>
-              <Text style={styles.toolbarBtnText} allowFontScaling={false}>−</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Increase text size" onPress={increaseFont} style={({ pressed }) => [styles.toolbarBtn, pressed && styles.toolbarBtnPressed]} hitSlop={8}>
-              <Text style={styles.toolbarBtnText} allowFontScaling={false}>+</Text>
-            </Pressable>
-          </View>
-          <View style={styles.toggleGroup} accessibilityRole="tablist">
-            <ToggleChip label="Gurmukhi" active={showGurmukhi} onPress={() => setShowGurmukhi(v => !v)} />
-            <ToggleChip label="Hindi"    active={showHindi}    onPress={() => setShowHindi(v => !v)} />
-            <ToggleChip label="English"  active={showEnglish}  onPress={() => setShowEnglish(v => !v)} />
-          </View>
-        </View>
-
-        {/* Visraam legend */}
         {showGurmukhi && (
           <View style={styles.legendRow} accessible accessibilityLabel="Pause legend">
             <LegendDot color={VISRAAM_COLORS.y} label="Gentle Pause" />
@@ -409,8 +444,7 @@ export default function PaathDetail() {
         )}
       </View>
     );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paathName, verses.length, fontSize, showGurmukhi, showHindi, showEnglish]);
+  }, [paathName, verses.length, showGurmukhi]);
 
   if (loading) {
     return (
@@ -425,7 +459,40 @@ export default function PaathDetail() {
 
   return (
     <SafeAreaView style={styles.screen}>
+      {/* Sticky action bar — always visible, sits above FlatList */}
+      <View style={styles.actionBar}>
+        <Pressable
+          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+          onPress={toggleBookmark}
+          accessibilityRole="button"
+          accessibilityLabel={isBookmarked ? 'Remove bookmark' : 'Bookmark this paath'}
+        >
+          <Ionicons
+            name={isBookmarked ? 'bookmark' : 'bookmark-outline'}
+            size={20}
+            color={isBookmarked ? SAFFRON : TEAL}
+          />
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+          onPress={() => setSettingsVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Font and language settings"
+        >
+          <Ionicons name="options-outline" size={20} color={TEAL} />
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+          onPress={scrollToTop}
+          accessibilityRole="button"
+          accessibilityLabel="Scroll to top"
+        >
+          <Ionicons name="arrow-up" size={20} color={TEAL} />
+        </Pressable>
+      </View>
+
       <FlatList
+        ref={flatListRef}
         data={displayVerses}
         keyExtractor={(item, i) => ('_sectionHeader' in item ? `section-${(item as SectionHeader).raagIndex}` : String(i))}
         renderItem={renderItem}
@@ -447,6 +514,55 @@ export default function PaathDetail() {
         scrollIndicatorInsets={{ right: 1 }}
         contentContainerStyle={styles.content}
       />
+
+      {/* Settings modal */}
+      <Modal
+        visible={settingsVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSettingsVisible(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setSettingsVisible(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Display Settings</Text>
+
+            {/* Font size */}
+            <Text style={styles.modalLabel}>Font Size</Text>
+            <View style={styles.fontRow}>
+              <Pressable
+                style={({ pressed }) => [styles.fontBtn, pressed && { opacity: 0.7 }]}
+                onPress={decreaseFont}
+                disabled={fontSize <= MIN_SIZE}
+                accessibilityLabel="Decrease font size"
+              >
+                <Text style={[styles.fontBtnText, fontSize <= MIN_SIZE && { opacity: 0.35 }]}>−</Text>
+              </Pressable>
+              <Text style={styles.fontSizeDisplay}>{fontSize}</Text>
+              <Pressable
+                style={({ pressed }) => [styles.fontBtn, pressed && { opacity: 0.7 }]}
+                onPress={increaseFont}
+                disabled={fontSize >= MAX_SIZE}
+                accessibilityLabel="Increase font size"
+              >
+                <Text style={[styles.fontBtnText, fontSize >= MAX_SIZE && { opacity: 0.35 }]}>+</Text>
+              </Pressable>
+            </View>
+
+            {/* Language toggles */}
+            <Text style={styles.modalLabel}>Languages</Text>
+            <View style={styles.toggleGroup}>
+              <ToggleChip label="Gurmukhi" active={showGurmukhi} onPress={() => setShowGurmukhi(v => !v)} />
+              <ToggleChip label="Hindi"    active={showHindi}    onPress={() => setShowHindi(v => !v)} />
+              <ToggleChip label="English"  active={showEnglish}  onPress={() => setShowEnglish(v => !v)} />
+            </View>
+
+            <Pressable style={styles.modalDone} onPress={() => setSettingsVisible(false)}>
+              <Text style={styles.modalDoneText}>Done</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -507,6 +623,31 @@ const styles = StyleSheet.create({
   content:     { paddingBottom: 24 },
   loader:      { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24, backgroundColor: WASH },
   loadingText: { marginTop: 10, fontSize: 15, color: PRIMARY, fontFamily: 'Inter-SemiBold' },
+
+  /* Nav header */
+  navGurmukhi: { fontFamily: 'NotoSansGurmukhi', fontSize: 16, color: TEAL, textAlign: 'center' },
+  navEnglish:  { fontFamily: 'Fraunces-LightItalic', fontSize: 12, color: MUTED, textAlign: 'center', marginTop: 1 },
+
+  /* Sticky action bar */
+  actionBar: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: CARD_BG,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  actionBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: WASH, borderWidth: 1, borderColor: BORDER,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  actionBtnPressed: { opacity: 0.65 },
+
+  /* Header card */
   headerCard: {
     backgroundColor: CARD_BG, borderRadius: 16, marginHorizontal: 16, marginTop: 16, marginBottom: 8,
     paddingVertical: 20, paddingHorizontal: 16, alignItems: 'center',
@@ -516,25 +657,6 @@ const styles = StyleSheet.create({
   titleEnglish:  { fontFamily: 'Fraunces-LightItalic', fontSize: 15, color: MUTED, textAlign: 'center', marginTop: 4 },
   headerDivider: { width: '50%', height: 1, backgroundColor: IVORY_DEEP, marginVertical: 12 },
   headerStats:   { fontFamily: 'Inter-SemiBold', fontSize: 10, color: MUTED, letterSpacing: 1.4 },
-
-  toolbar: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: CARD_BG, borderRadius: 12, borderWidth: 1, borderColor: BORDER,
-    paddingVertical: 8, paddingHorizontal: 12, marginHorizontal: 16, marginBottom: 8, flexWrap: 'wrap', gap: 8,
-  },
-  ttSmall:         { fontSize: 14, fontFamily: 'Inter-Bold', color: TEAL, marginRight: 2 },
-  ttLarge:         { fontSize: 18, fontFamily: 'Inter-Bold', color: TEAL },
-  toolbarBtns:     { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 8 },
-  toolbarBtn:      { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: TEAL, alignItems: 'center', justifyContent: 'center', backgroundColor: CARD_BG },
-  toolbarBtnPressed: { opacity: 0.7 },
-  toolbarBtnText:  { fontSize: 18, fontFamily: 'Inter-Bold', color: TEAL, includeFontPadding: false, textAlignVertical: 'center' },
-  toggleGroup:     { flexDirection: 'row', alignItems: 'center', gap: 6, width: '100%' },
-
-  chip:            { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },
-  chipActive:      { backgroundColor: TEAL, borderColor: TEAL },
-  chipInactive:    { backgroundColor: CARD_BG, borderColor: IVORY_DEEP },
-  chipText:        { fontSize: 12, fontFamily: 'Inter-SemiBold' },
-  chipTextActive:  { color: '#FFFFFF' },
-  chipTextInactive:{ color: MUTED },
 
   legendRow:  { flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 16, marginBottom: 10 },
   legendItem: { flexDirection: 'row', alignItems: 'center' },
@@ -547,8 +669,8 @@ const styles = StyleSheet.create({
     backgroundColor: CARD_BG, borderRadius: 12,
     borderWidth: 1, borderColor: IVORY_DEEP, overflow: 'hidden',
   },
-  raagHeaderAccent: { width: 4, alignSelf: 'stretch', backgroundColor: SAFFRON },
-  raagHeaderText:   { flex: 1, paddingVertical: 12, paddingHorizontal: 12 },
+  raagHeaderAccent:   { width: 4, alignSelf: 'stretch', backgroundColor: SAFFRON },
+  raagHeaderText:     { flex: 1, paddingVertical: 12, paddingHorizontal: 12 },
   raagHeaderGurmukhi: { fontFamily: 'NotoSansGurmukhi', fontSize: 17, color: TEAL, lineHeight: 26 },
   raagHeaderEnglish:  { fontFamily: 'Fraunces-LightItalic', fontSize: 12, color: MUTED, marginTop: 2 },
 
@@ -560,5 +682,35 @@ const styles = StyleSheet.create({
   translation:     { fontSize: 14, color: '#3C3F44' },
   emptyCard:       { backgroundColor: CARD_BG, borderRadius: 14, padding: 16, marginHorizontal: 16, borderWidth: 1, borderColor: BORDER, alignItems: 'center' },
   emptyText:       { color: SUBTLE, fontSize: 14, fontFamily: 'Inter-Regular', textAlign: 'center' },
-  ttLogo:          { flexDirection: 'row', alignItems: 'flex-end' },
+
+  /* Settings modal */
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' },
+  modalCard: {
+    backgroundColor: CARD_BG, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    paddingHorizontal: 24, paddingBottom: 36, paddingTop: 12,
+    borderTopWidth: 1, borderColor: BORDER,
+  },
+  modalHandle:   { width: 36, height: 4, borderRadius: 2, backgroundColor: BORDER, alignSelf: 'center', marginBottom: 16 },
+  modalTitle:    { fontFamily: 'Fraunces-Regular', fontSize: 22, color: TEAL, marginBottom: 20 },
+  modalLabel:    { fontFamily: 'Inter-SemiBold', fontSize: 11, color: MUTED, letterSpacing: 1.2, marginBottom: 10, marginTop: 4 },
+  fontRow:       { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 20 },
+  fontBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: WASH, borderWidth: 1, borderColor: BORDER,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  fontBtnText:      { fontSize: 20, fontFamily: 'Inter-Bold', color: TEAL, includeFontPadding: false },
+  fontSizeDisplay:  { fontFamily: 'Inter-SemiBold', fontSize: 18, color: TEAL, minWidth: 36, textAlign: 'center' },
+  toggleGroup:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
+  chip:             { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
+  chipActive:       { backgroundColor: TEAL, borderColor: TEAL },
+  chipInactive:     { backgroundColor: WASH, borderColor: IVORY_DEEP },
+  chipText:         { fontSize: 13, fontFamily: 'Inter-SemiBold' },
+  chipTextActive:   { color: '#FFFFFF' },
+  chipTextInactive: { color: MUTED },
+  modalDone: {
+    backgroundColor: TEAL, borderRadius: 14, paddingVertical: 14,
+    alignItems: 'center',
+  },
+  modalDoneText: { color: '#FFFFFF', fontFamily: 'Inter-SemiBold', fontSize: 15 },
 });

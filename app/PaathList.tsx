@@ -21,7 +21,8 @@ type PaathListNavProp = NativeStackNavigationProp<
   'PaathScreen'
 >;
 
-const FAV_KEY = 'paath_favorites_v1';
+const FAV_KEY       = 'paath_favorites_v1';
+const BOOKMARKS_KEY = 'paath_bookmarks_v1';
 
 export default function PaathList() {
   const navigation = useNavigation<PaathListNavProp>();
@@ -52,15 +53,19 @@ export default function PaathList() {
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [showOnlyFavs, setShowOnlyFavs] = useState(false);
 
-  // Load favorites on mount
+  // 🔖 Bookmarks from PaathDetail
+  const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
+
+  // Load favorites and bookmarks on mount
   useEffect(() => {
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(FAV_KEY);
-        if (raw) {
-          const arr: string[] = JSON.parse(raw);
-          setFavorites(new Set(arr));
-        }
+        const [rawFav, rawBook] = await Promise.all([
+          AsyncStorage.getItem(FAV_KEY),
+          AsyncStorage.getItem(BOOKMARKS_KEY),
+        ]);
+        if (rawFav)  setFavorites(new Set(JSON.parse(rawFav)));
+        if (rawBook) setBookmarks(new Set(JSON.parse(rawBook)));
       } catch {}
     })();
   }, []);
@@ -79,7 +84,11 @@ export default function PaathList() {
   }, [paaths, showOnlyFavs, favorites]);
 
   const handlePress = (paathName: string) => {
-    navigation.navigate('PaathDetail', { paathName });
+    if (paathName === 'ਭਗਤ ਬਾਣੀ | Bhagat Bani') {
+      navigation.navigate('BhagatBaniList');
+    } else {
+      navigation.navigate('PaathDetail', { paathName });
+    }
   };
 
   const toggleFavorite = (name: string) => {
@@ -92,7 +101,7 @@ export default function PaathList() {
 
   return (
     <SafeAreaView
-      style={[styles.safeArea, { paddingTop: insets.top }]}
+      style={styles.safeArea}
       edges={['top', 'left', 'right']}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -130,7 +139,8 @@ export default function PaathList() {
         {/* List */}
         <View style={styles.list}>
           {filtered.map((paath, i) => {
-            const isFav = favorites.has(paath);
+            const isFav      = favorites.has(paath);
+            const isBookmark = bookmarks.has(paath);
             const parts = paath.split(' | ');
             const gurmukhiTitle = parts[0] || paath;
             const englishTitle  = parts[1] || '';
@@ -148,6 +158,10 @@ export default function PaathList() {
                   <Text style={styles.titleGurmukhi}>{gurmukhiTitle}</Text>
                   {!!englishTitle && <Text style={styles.titleEnglish}>{englishTitle}</Text>}
                 </View>
+
+                {isBookmark && (
+                  <Ionicons name="bookmark" size={16} color={SAFFRON} style={{ marginRight: 6 }} />
+                )}
 
                 <TouchableOpacity
                   onPress={() => toggleFavorite(paath)}
