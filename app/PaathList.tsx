@@ -43,6 +43,7 @@ export default function PaathList() {
     'ਦਖਣੀ ਓਅੰਕਾਰੁ | Dakhni Oankar',
     'ਦੁਖ ਭੰਜਨੀ ਸਾਹਿਬ | Dukh Banjani Sahib',
     'ਆਸਾ ਦੀ ਵਾਰ | Asa Di Vaar',
+    'ਭਗਤ ਬਾਣੀ | Bhagat Bani',
   ];
 
   const [aboutVisible, setAboutVisible] = useState(false);
